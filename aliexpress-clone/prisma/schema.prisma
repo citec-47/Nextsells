@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(BUYER)
+  blocked   Boolean  @default(false)
+
+  products  Product[]
+  orders    Order[]
+  reviews   Review[]
+  messages  Message[]
+
+  createdAt DateTime @default(now())
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  price       Float
+  stock       Int
+  image       String
+  published   Boolean  @default(false)
+
+  sellerId    String
+  seller      User     @relation(fields: [sellerId], references: [id])
+
+  reviews     Review[]
+  orderItems  OrderItem[]
+
+  createdAt   DateTime @default(now())
+}
+
+model Review {
+  id        String  @id @default(uuid())
+  rating    Int
+  comment   String
+
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+
+  buyer     User    @relation(fields: [buyerId], references: [id])
+  buyerId   String
+}
+
+model Order {
+  id         String      @id @default(uuid())
+  buyer      User        @relation(fields: [buyerId], references: [id])
+  buyerId    String
+
+  status     OrderStatus @default(PENDING)
+  total      Float
+  paymentId  String?
+
+  items      OrderItem[]
+  createdAt  DateTime    @default(now())
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   String
+
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+
+  quantity  Int
+}
+
+model Withdrawal {
+  id        String @id @default(uuid())
+  sellerId  String
+  seller    User   @relation(fields: [sellerId], references: [id])
+  amount    Float
+  approved  Boolean @default(false)
+}
+
+model Message {
+  id        String @id @default(uuid())
+  senderId  String
+  receiverId String
+  content   String
+  createdAt DateTime @default(now())
+}
