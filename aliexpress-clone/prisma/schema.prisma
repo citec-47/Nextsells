@@ -7,102 +7,276 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Enums
 enum Role {
   BUYER
   SELLER
   ADMIN
 }
 
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DocumentType {
+  NATIONAL_ID
+  PASSPORT
+  BUSINESS_LICENSE
+  TAX_ID
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
 enum OrderStatus {
   PENDING
+  CONFIRMED
   PAID
+  PROCESSING
   SHIPPED
   DELIVERED
   CANCELLED
 }
 
+// Core Models
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(BUYER)
-  blocked   Boolean  @default(false)
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String
+  name          String
+  phone         String?
+  role          Role     @default(BUYER)
+  isVerified    Boolean  @default(false)
+  isBlocked     Boolean  @default(false)
 
-  products  Product[]
-  orders    Order[]
-  reviews   Review[]
-  messages  Message[]
+  // Relations
+  sellerProfile SellerProfile?
+  products      Product[]
+  orders        Order[]
+  reviews       Review[]
+  sentMessages  Message[]  @relation("sent")
+  receivedMessages Message[] @relation("received")
+  withdrawals   Withdrawal[]
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
+// Seller Profile & Onboarding
+model SellerProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Personal Info
+  companyName     String
+  businessType    String   // Sole Proprietor, LLC, Corporation, etc.
+  businessAddress String
+  city            String
+  state           String
+  zipCode         String
+  country         String
+  taxId           String?
+
+  // Profile
+  logo            String?  // URL to uploaded logo
+  banner          String?  // Banner image URL
+  bio             String?
+  website         String?
+
+  // Onboarding Status
+  status          OnboardingStatus @default(NOT_STARTED)
+  rejectionReason String?
+
+  // Bank Details (encrypted in production)
+  bankName        String?
+  accountNumber   String?
+  routingNumber   String?
+
+  // Metrics
+  totalRevenue    Float   @default(0)
+  totalOrders     Int     @default(0)
+  rating          Float   @default(0)
+
+  // Relations
+  documents       SellerDocument[]
+  approvalRequest ApprovalRequest?
+  products        Product[]
+  withdrawals     Withdrawal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SellerDocument {
+  id              String   @id @default(uuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  documentType    DocumentType
+  documentNumber  String
+  documentUrl     String
+  expiryDate      DateTime?
+  status          DocumentStatus @default(PENDING)
+  rejectionReason String?
+
+  uploadedAt      DateTime @default(now())
+  verifiedAt      DateTime?
+}
+
+model ApprovalRequest {
+  id              String   @id @default(uuid())
+  sellerId        String   @unique
+  seller          SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  status          DocumentStatus @default(PENDING)
+  notes           String?
+  approvedBy      String?  // Admin user ID
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Products
 model Product {
-  id          String   @id @default(uuid())
-  title       String
-  description String
-  price       Float
-  stock       Int
-  image       String
-  published   Boolean  @default(false)
+  id              String   @id @default(uuid())
+  title           String
+  description     String
+  category        String
+  basePrice       Float    // Original/Cost price
+  sellingPrice    Float    // Price after profit margin
+  profitMargin    Float    // Percentage (e.g., 20 for 20%)
+  stock           Int      @default(0)
+  images          String[] // URLs to product images
+  sku             String?  @unique
+  isPublished     Boolean  @default(false)
+  isFeatured      Boolean  @default(false)
 
-  sellerId    String
-  seller      User     @relation(fields: [sellerId], references: [id])
+  // Relations
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id])
+  reviews         Review[]
+  orderItems      OrderItem[]
 
-  reviews     Review[]
-  orderItems  OrderItem[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdAt   DateTime @default(now())
+  @@index([sellerId])
+  @@index([category])
 }
 
-model Review {
-  id        String  @id @default(uuid())
-  rating    Int
-  comment   String
-
-  product   Product @relation(fields: [productId], references: [id])
-  productId String
-
-  buyer     User    @relation(fields: [buyerId], references: [id])
-  buyerId   String
-}
-
+// Orders & Payments
 model Order {
-  id         String      @id @default(uuid())
-  buyer      User        @relation(fields: [buyerId], references: [id])
-  buyerId    String
+  id              String   @id @default(uuid())
+  orderNumber     String   @unique
+  
+  // Parties
+  buyerId         String
+  buyer           User     @relation(fields: [buyerId], references: [id])
 
-  status     OrderStatus @default(PENDING)
-  total      Float
-  paymentId  String?
+  // Amounts (funds held until delivery)
+  subtotal        Float
+  tax             Float   @default(0)
+  shippingCost    Float   @default(0)
+  totalAmount     Float
+  heldAmount      Float   @default(0) // Amount held until delivery
 
-  items      OrderItem[]
-  createdAt  DateTime    @default(now())
+  // Status
+  status          OrderStatus @default(PENDING)
+  paymentId       String? // Stripe/Payment gateway ID
+  transactionId   String?
+
+  // Delivery
+  shippingAddress String
+  deliveryDate    DateTime?
+
+  // Relations
+  items           OrderItem[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([buyerId])
+  @@index([status])
 }
 
 model OrderItem {
+  id              String   @id @default(uuid())
+  orderId         String
+  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId       String
+  product         Product  @relation(fields: [productId], references: [id])
+
+  quantity        Int
+  pricePerUnit    Float
+  subtotal        Float
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// Reviews & Ratings
+model Review {
   id        String  @id @default(uuid())
-  order     Order   @relation(fields: [orderId], references: [id])
-  orderId   String
+  rating    Int     // 1-5
+  comment   String?
+  helpful   Int     @default(0)
 
-  product   Product @relation(fields: [productId], references: [id])
   productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  quantity  Int
-}
+  buyerId   String
+  buyer     User    @relation(fields: [buyerId], references: [id])
 
-model Withdrawal {
-  id        String @id @default(uuid())
-  sellerId  String
-  seller    User   @relation(fields: [sellerId], references: [id])
-  amount    Float
-  approved  Boolean @default(false)
-}
-
-model Message {
-  id        String @id @default(uuid())
-  senderId  String
-  receiverId String
-  content   String
   createdAt DateTime @default(now())
+
+  @@unique([productId, buyerId])
+  @@index([productId])
+}
+
+// Seller Withdrawals
+model Withdrawal {
+  id        String  @id @default(uuid())
+  sellerId  String
+  seller    User    @relation(fields: [sellerId], references: [id])
+
+  amount    Float
+  status    String  @default("pending") // pending, approved, completed, failed
+  bankAccount String?
+  
+  requestedAt DateTime @default(now())
+  approvedAt  DateTime?
+  completedAt DateTime?
+
+  @@index([sellerId])
+  @@index([status])
+}
+
+// Messaging
+model Message {
+  id          String  @id @default(uuid())
+  senderId    String
+  sender      User    @relation("sent", fields: [senderId], references: [id])
+  
+  receiverId  String
+  receiver    User    @relation("received", fields: [receiverId], references: [id])
+  
+  content     String
+  isRead      Boolean @default(false)
+  
+  createdAt   DateTime @default(now())
+
+  @@index([senderId])
+  @@index([receiverId])
 }
