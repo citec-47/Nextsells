@@ -87,11 +87,27 @@ img {
   image-rendering: -webkit-optimize-contrast;
 }
 
+/* Hide scrollbars for horizontal navs */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  /* scrollbar-width: none supports Firefox but not all browsers */
+  /* Use webkit scrollbar pseudo-elements below for better compatibility */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Container responsive padding */
 @media (max-width: 640px) {
   .container {
     padding-left: 1rem;
     padding-right: 1rem;
   }
+}
+
+/* Progress bar with CSS variable width */
+.progress-bar-fill {
+  width: var(--progress-width, 0%);
 }
 

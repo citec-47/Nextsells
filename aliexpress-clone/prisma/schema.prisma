@@ -3,8 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
 }
 
 // Enums
@@ -59,7 +58,6 @@ model User {
 
   // Relations
   sellerProfile SellerProfile?
-  products      Product[]
   orders        Order[]
   reviews       Review[]
   sentMessages  Message[]  @relation("sent")
@@ -110,7 +108,6 @@ model SellerProfile {
   documents       SellerDocument[]
   approvalRequest ApprovalRequest?
   products        Product[]
-  withdrawals     Withdrawal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -157,7 +154,7 @@ model Product {
   sellingPrice    Float    // Price after profit margin
   profitMargin    Float    // Percentage (e.g., 20 for 20%)
   stock           Int      @default(0)
-  images          String[] // URLs to product images
+  images          String   // JSON array of URLs
   sku             String?  @unique
   isPublished     Boolean  @default(false)
   isFeatured      Boolean  @default(false)

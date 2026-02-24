@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ShoppingCart, User, Menu, X, Search } from 'lucide-react';
+import { Heart, ShoppingCart, User, Menu, X, Search } from 'lucide-react';
+import { useShopState } from '../buyer/ShopStateProvider';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
@@ -11,6 +12,7 @@ interface HeaderProps {
 export default function Header({ onSearch }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { cartCount, wishlistCount } = useShopState();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,80 +22,71 @@ export default function Header({ onSearch }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white shadow-md">
+    <header className="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-100">
       {/* Top Bar */}
-      <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
-        <div className="container mx-auto px-4 py-2 flex justify-between items-center text-sm">
-          <div className="flex items-center gap-4">
-            <span className="hidden md:inline">Welcome to Nextsells</span>
-            <Link href="/seller/onboarding" className="hover:underline">
-              Sell on Nextsells
+      <div className="bg-gradient-to-r from-orange-500 via-orange-600 to-red-500 text-white">
+        <div className="container mx-auto px-4 py-2 flex justify-between items-center text-xs md:text-sm">
+          <div className="flex items-center gap-2 md:gap-4">
+            <span className="hidden lg:inline text-white/90">Welcome to Nextsells</span>
+            <Link href="/seller/onboarding" className="hover:text-white/90 transition-colors font-medium">
+              Become a Seller
             </Link>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/buyer/orders" className="hover:underline">
-              My Orders
+          <div className="flex items-center gap-2 md:gap-4">
+            <Link href="/auth/accounts" className="hover:text-white/90 transition-colors hidden sm:inline">
+              Sign In
             </Link>
-            <Link href="/buyer/dashboard" className="hover:underline flex items-center gap-1">
-              <User size={16} aria-hidden="true" />
-              <span>Account</span>
+            <span className="text-white/50 hidden sm:inline">|</span>
+            <Link href="/buyer/orders" className="hover:text-white/90 transition-colors hidden sm:inline">
+              Orders
+            </Link>
+            <span className="text-white/50 hidden md:inline">|</span>
+            <Link href="/auth/accounts" className="hover:text-white/90 transition-colors flex items-center gap-1">
+              <User size={14} className="md:hidden" />
+              <span className="hidden md:inline">Account</span>
             </Link>
           </div>
         </div>
       </div>
 
       {/* Main Header */}
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between gap-4">
-          {/* Logo */}
-          <Link href="/" className="flex-shrink-0" aria-label="Nextsells Home">
-            <h1 className="text-2xl md:text-3xl font-bold text-orange-500">
-              Nextsells
-            </h1>
-          </Link>
-
-          {/* Search Bar */}
-          <form 
-            onSubmit={handleSearch} 
-            className="flex-1 max-w-3xl hidden md:flex"
-            role="search"
-          >
-            <div className="flex w-full border-2 border-orange-500 rounded-full overflow-hidden focus-within:ring-2 focus-within:ring-orange-400">
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for products, brands and more..."
-                className="flex-1 px-6 py-3 outline-none text-gray-700"
-                aria-label="Search products"
-              />
-              <button
-                type="submit"
-                className="bg-orange-500 text-white px-8 hover:bg-orange-600 transition-colors"
-                aria-label="Submit search"
-              >
-                <Search size={20} aria-hidden="true" />
-              </button>
-            </div>
-          </form>
-
-          {/* Cart & Mobile Menu */}
-          <div className="flex items-center gap-4">
-            <Link
-              href="/buyer/checkout"
-              className="relative group"
-              aria-label="Shopping cart"
-            >
-              <ShoppingCart 
-                size={28} 
-                className="text-gray-700 group-hover:text-orange-500 transition-colors" 
-                aria-hidden="true"
-              />
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                0
-              </span>
+      <div className="bg-white">
+        <div className="container mx-auto px-4 py-3 md:py-4">
+          <div className="flex items-center justify-between gap-3 md:gap-4">
+            {/* Logo */}
+            <Link href="/" className="flex-shrink-0" aria-label="Nextsells Home">
+              <h1 className="text-xl md:text-3xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 text-transparent bg-clip-text">
+                Nextsells
+              </h1>
             </Link>
 
+            {/* Search Bar */}
+            <form 
+              onSubmit={handleSearch} 
+              className="flex-1 max-w-2xl hidden md:flex"
+              role="search"
+            >
+              <div className="flex w-full bg-gray-50 border border-gray-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-orange-400 focus-within:border-orange-400 transition-all">
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search for products, brands and more..."
+                  className="flex-1 px-4 py-2.5 outline-none text-gray-700 bg-transparent text-sm"
+                  aria-label="Search products"
+                />
+                <button
+                  type="submit"
+                  className="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 hover:from-orange-600 hover:to-orange-700 transition-all flex items-center gap-2"
+                  aria-label="Submit search"
+                >
+                  <Search size={18} aria-hidden="true" />
+                </button>
+              </div>
+          </form>
+
+          {/* Mobile Menu */}
+          <div className="flex items-center gap-4">
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -133,6 +126,13 @@ export default function Header({ onSearch }: HeaderProps) {
         <nav className="md:hidden bg-gray-50 border-t" aria-label="Mobile navigation">
           <div className="container mx-auto px-4 py-4 flex flex-col gap-3">
             <Link
+              href="/auth/accounts"
+              className="py-2 px-4 hover:bg-gray-200 rounded font-semibold text-blue-600"
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              Sign Up / Register
+            </Link>
+            <Link
               href="/buyer/orders"
               className="py-2 px-4 hover:bg-gray-200 rounded"
               onClick={() => setIsMobileMenuOpen(false)}
@@ -140,7 +140,7 @@ export default function Header({ onSearch }: HeaderProps) {
               My Orders
             </Link>
             <Link
-              href="/buyer/dashboard"
+              href="/auth/accounts"
               className="py-2 px-4 hover:bg-gray-200 rounded"
               onClick={() => setIsMobileMenuOpen(false)}
             >

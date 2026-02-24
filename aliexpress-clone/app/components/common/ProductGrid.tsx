@@ -147,9 +147,7 @@ export default function ProductGrid({
               <Link href={`/buyer/products/${product.id}`} className="block">
                 {/* Product Image */}
                 <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-                    <span className="text-gray-400 text-sm">Product Image</span>
-                  </div>
+                  <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200" />
                   
                   {/* Badge */}
                   {product.badge && (

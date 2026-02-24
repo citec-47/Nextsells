@@ -1,4 +1,5 @@
-import ProductBrowser from '@/app/components/buyer/ProductBrowser';
+import ShopPageModern from '@/app/components/buyer/ShopPageModern';
+import ModernHeader from '@/app/components/common/ModernHeader';
 
 export const metadata = {
   title: 'Shop Products - NextSells',
@@ -6,5 +7,10 @@ export const metadata = {
 };
 
 export default function BuyerProductsPage() {
-  return <ProductBrowser />;
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <ModernHeader />
+      <ShopPageModern />
+    </div>
+  );
 }

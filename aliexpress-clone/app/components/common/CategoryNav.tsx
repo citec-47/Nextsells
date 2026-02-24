@@ -1,20 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  Smartphone,
-  Laptop,
-  Shirt,
-  Home,
-  Dumbbell,
-  Book,
-  Baby,
-  Gamepad2,
-  Watch,
-  Headphones,
-  Package,
-  Gift,
-} from 'lucide-react';
+import { Grid3x3, Sparkles, Package, Shirt, Home, Apple, Coffee, Laptop, ShoppingBag, Footprints, Watch } from 'lucide-react';
 
 interface Category {
   id: string;
@@ -24,40 +11,36 @@ interface Category {
 }
 
 const categories: Category[] = [
-  { id: '1', name: 'Phones', icon: <Smartphone size={32} />, link: '/buyer/products?category=phones' },
-  { id: '2', name: 'Electronics', icon: <Laptop size={32} />, link: '/buyer/products?category=electronics' },
-  { id: '3', name: 'Fashion', icon: <Shirt size={32} />, link: '/buyer/products?category=fashion' },
-  { id: '4', name: 'Home', icon: <Home size={32} />, link: '/buyer/products?category=home' },
-  { id: '5', name: 'Sports', icon: <Dumbbell size={32} />, link: '/buyer/products?category=sports' },
-  { id: '6', name: 'Books', icon: <Book size={32} />, link: '/buyer/products?category=books' },
-  { id: '7', name: 'Baby', icon: <Baby size={32} />, link: '/buyer/products?category=baby' },
-  { id: '8', name: 'Gaming', icon: <Gamepad2 size={32} />, link: '/buyer/products?category=gaming' },
-  { id: '9', name: 'Watches', icon: <Watch size={32} />, link: '/buyer/products?category=watches' },
-  { id: '10', name: 'Audio', icon: <Headphones size={32} />, link: '/buyer/products?category=audio' },
-  { id: '11', name: 'Gifts', icon: <Gift size={32} />, link: '/buyer/products?category=gifts' },
-  { id: '12', name: 'More', icon: <Package size={32} />, link: '/buyer/products' },
+  { id: 'all', name: 'All', icon: <Grid3x3 className="w-5 h-5" />, link: '/buyer/products' },
+  { id: 'beauty', name: 'Beauty', icon: <Sparkles className="w-5 h-5" />, link: '/buyer/products?category=beauty' },
+  { id: 'fragrances', name: 'Fragrances', icon: <Package className="w-5 h-5" />, link: '/buyer/products?category=fragrances' },
+  { id: 'furniture', name: 'Furniture', icon: <Home className="w-5 h-5" />, link: '/buyer/products?category=furniture' },
+  { id: 'groceries', name: 'Groceries', icon: <Apple className="w-5 h-5" />, link: '/buyer/products?category=groceries' },
+  { id: 'home-decoration', name: 'Home Decoration', icon: <Home className="w-5 h-5" />, link: '/buyer/products?category=home-decoration' },
+  { id: 'kitchen', name: 'Kitchen Accessories', icon: <Coffee className="w-5 h-5" />, link: '/buyer/products?category=kitchen-accessories' },
+  { id: 'laptops', name: 'Laptops', icon: <Laptop className="w-5 h-5" />, link: '/buyer/products?category=laptops' },
+  { id: 'mens-shirts', name: 'Mens Shirts', icon: <Shirt className="w-5 h-5" />, link: '/buyer/products?category=mens-shirts' },
+  { id: 'mens-shoes', name: 'Mens Shoes', icon: <Footprints className="w-5 h-5" />, link: '/buyer/products?category=mens-shoes' },
+  { id: 'mens-watches', name: 'Mens Watches', icon: <Watch className="w-5 h-5" />, link: '/buyer/products?category=mens-watches' },
 ];
 
 export default function CategoryNav() {
   return (
-    <section className="bg-white py-6 border-b" aria-label="Product categories">
-      <div className="container mx-auto px-4">
-        <h2 className="text-xl md:text-2xl font-bold mb-6 text-gray-800">
-          Shop by Category
-        </h2>
+    <section className="sticky top-16 md:top-[72px] z-40 w-full left-0 right-0 bg-white/95 backdrop-blur py-2.5 md:py-4 border-b border-gray-200 shadow-sm" aria-label="Product categories">
+      <div className="w-full px-2 sm:px-4">
         <nav>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-4">
+          <div className="flex gap-4 sm:gap-6 overflow-x-auto scrollbar-hide md:justify-between">
             {categories.map((category) => (
               <Link
                 key={category.id}
                 href={category.link}
-                className="flex flex-col items-center justify-center p-4 rounded-lg hover:bg-orange-50 hover:shadow-md transition-all group"
+                className="flex flex-col items-center gap-1.5 sm:gap-2 min-w-fit hover:opacity-75 transition-opacity group"
                 aria-label={`Browse ${category.name}`}
               >
-                <div className="text-orange-500 group-hover:text-orange-600 group-hover:scale-110 transition-transform mb-2" aria-hidden="true">
+                <div className="text-gray-700 group-hover:text-blue-600 transition-colors" aria-hidden="true">
                   {category.icon}
                 </div>
-                <span className="text-xs md:text-sm font-medium text-gray-700 text-center">
+                <span className="text-[10px] sm:text-xs font-medium text-gray-700 group-hover:text-blue-600 transition-colors whitespace-nowrap">
                   {category.name}
                 </span>
               </Link>

@@ -1,3 +1,4 @@
+import { requireRole } from '@/lib/auth/protectedRoutes';
 import AdminApprovalDashboard from '@/app/components/admin/ApprovalDashboard';
 
 export const metadata = {
@@ -5,6 +6,8 @@ export const metadata = {
   description: 'Review and approve seller applications',
 };
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+  await requireRole(['admin']);
+  
   return <AdminApprovalDashboard />;
 }
