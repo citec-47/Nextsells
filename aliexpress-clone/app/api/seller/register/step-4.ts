@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'crypto';
 import { extractToken, verifyToken } from '@/lib/auth/jwt';
 import { errorResponse, successResponse } from '@/lib/utils/api';
-import { prisma } from '@/lib/prisma';
+import { query } from '@/lib/db';
 
 /**
  * POST /api/seller/register/step-4
@@ -21,15 +22,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Get seller profile
-    const sellerProfile = await prisma.sellerProfile.findUnique({
-      where: { userId: payload.userId },
-    });
+    const profileResult = await query(
+      'SELECT * FROM seller_profiles WHERE user_id = $1',
+      [payload.userId]
+    );
+    const sellerProfile = profileResult.rows[0];
 
     if (!sellerProfile) {
       return errorResponse('Seller profile not found', 404);
     }
 
-    if (sellerProfile.status !== 'IN_PROGRESS') {
+    if (sellerProfile.onboarding_status !== 'IN_PROGRESS') {
       return errorResponse(
         'Seller onboarding is not in progress',
         400,
@@ -53,44 +56,36 @@ export async function POST(request: NextRequest) {
       return errorResponse('Government ID URL and number are required', 400);
     }
 
-    if (!governmentIdType || !['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE'].includes(governmentIdType)) {
+    if (!governmentIdType || !['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE', 'BUSINESS_LICENSE', 'TAX_ID'].includes(governmentIdType)) {
       return errorResponse(
         'Valid government ID type is required',
         400
       );
     }
 
-    // Create or update seller document record
-    const existingDoc = await prisma.sellerDocument.findFirst({
-      where: { sellerId: sellerProfile.id },
-    });
+    // Check if document already exists for this seller
+    const existingDocResult = await query(
+      'SELECT * FROM seller_documents WHERE seller_id = $1 LIMIT 1',
+      [sellerProfile.id]
+    );
+    const existingDoc = existingDocResult.rows[0];
 
     if (existingDoc) {
-      await prisma.sellerDocument.update({
-        where: { id: existingDoc.id },
-        data: {
-          documentType: governmentIdType,
-          documentNumber: governmentIdNumber,
-          expiryDate: governmentIdExpiration ? new Date(governmentIdExpiration) : null,
-          documentUrl: governmentIdUrl,
-          documentPublicId: governmentIdPublicId,
-          taxDocumentUrl: taxDocumentUrl || null,
-          taxDocumentPublicId: taxDocumentPublicId || null,
-        },
-      });
+      // Update existing document
+      await query(
+        `UPDATE seller_documents 
+         SET document_type = $1, document_url = $2, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $3`,
+        [governmentIdType, governmentIdUrl, existingDoc.id]
+      );
     } else {
-      await prisma.sellerDocument.create({
-        data: {
-          sellerId: sellerProfile.id,
-          documentType: governmentIdType,
-          documentNumber: governmentIdNumber,
-          expiryDate: governmentIdExpiration ? new Date(governmentIdExpiration) : null,
-          documentUrl: governmentIdUrl,
-          documentPublicId: governmentIdPublicId,
-          taxDocumentUrl: taxDocumentUrl || null,
-          taxDocumentPublicId: taxDocumentPublicId || null,
-        },
-      });
+      // Create new document
+      const docId = randomUUID();
+      await query(
+        `INSERT INTO seller_documents (id, seller_id, document_type, document_url, status, created_at, updated_at) 
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [docId, sellerProfile.id, governmentIdType, governmentIdUrl, 'PENDING']
+      );
     }
 
     return successResponse(

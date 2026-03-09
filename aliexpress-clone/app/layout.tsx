@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Auth0Provider } from "@auth0/nextjs-auth0/client";
 import "./globals.css";
 import ShopStateProvider from "./components/buyer/ShopStateProvider";
+import { AuthStateMonitor } from "./components/auth/AuthStateMonitor";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,7 +30,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ShopStateProvider>{children}</ShopStateProvider>
+        <ShopStateProvider>
+          <Auth0Provider>
+            <AuthStateMonitor />
+            {children}
+          </Auth0Provider>
+        </ShopStateProvider>
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { extractToken, verifyToken } from '@/lib/auth/jwt';
 import { errorResponse, successResponse } from '@/lib/utils/api';
-import { prisma } from '@/lib/prisma';
+import { query } from '@/lib/db';
 
 /**
  * POST /api/seller/register/step-2
@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
     const token = extractToken(request.headers.get('authorization'));
     console.log('[Step-2] Token extracted:', !!token);
     if (!token) {
-      console.log('[Step-2] No token, returning 401');
       return errorResponse('Unauthorized', 401);
     }
 
@@ -26,9 +25,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Get seller profile
-    const sellerProfile = await prisma.sellerProfile.findUnique({
-      where: { userId: payload.userId },
-    });
+    const result = await query(
+      'SELECT * FROM seller_profiles WHERE user_id = $1',
+      [payload.userId]
+    );
+    const sellerProfile = result.rows[0];
     console.log('[Step-2] Seller profile found:', !!sellerProfile);
 
     if (!sellerProfile) {
@@ -36,8 +37,8 @@ export async function POST(request: NextRequest) {
       return errorResponse('Seller profile not found', 404);
     }
 
-    console.log('[Step-2] Seller status:', sellerProfile.status);
-    if (sellerProfile.status !== 'IN_PROGRESS') {
+    console.log('[Step-2] Seller status:', sellerProfile.onboarding_status);
+    if (sellerProfile.onboarding_status !== 'IN_PROGRESS') {
       console.log('[Step-2] Invalid status, returning 400');
       return errorResponse(
         'Seller onboarding is not in progress',
@@ -65,16 +66,12 @@ export async function POST(request: NextRequest) {
 
     console.log('[Step-2] Updating seller profile...');
     // Update seller profile with logo and business info
-    await prisma.sellerProfile.update({
-      where: { id: sellerProfile.id },
-      data: {
-        companyName: companyName.trim(),
-        businessType: businessType || 'Not Specified',
-        website: website?.trim() || null,
-        bio: bio?.trim() || null,
-        logo: logoUrl,
-      },
-    });
+    await query(
+      `UPDATE seller_profiles 
+       SET company_name = $1, logo_url = $2, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $3`,
+      [companyName.trim(), logoUrl, sellerProfile.id]
+    );
 
     console.log('[Step-2] Profile updated, returning success');
     return successResponse(

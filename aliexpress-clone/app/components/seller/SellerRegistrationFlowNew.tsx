@@ -11,7 +11,6 @@ import {
   MapPin,
   FileCheck,
   Lock,
-  Mail,
   AlertCircle,
 } from 'lucide-react';
 import ImageUpload from '@/app/components/common/ImageUpload';
@@ -689,8 +688,7 @@ export default function SellerRegistrationFlow() {
                           logoPublicId: publicId,
                         });
                         toast.success('Logo uploaded successfully');
-                      }}
-                    />
+                      } } uploadType={'documents'}                    />
                   </div>
 
                   <div className="flex gap-3 pt-6">
@@ -873,7 +871,7 @@ export default function SellerRegistrationFlow() {
                           if (selected) {
                             setStep4Data({
                               ...step4Data,
-                              governmentIdType: selected.value as any,
+                                                                                                  governmentIdType: selected.value as 'PASSPORT' | 'NATIONAL_ID' | 'DRIVERS_LICENSE',
                             });
                           }
                         }}
@@ -937,8 +935,7 @@ export default function SellerRegistrationFlow() {
                           governmentIdPublicId: publicId,
                         });
                         toast.success('ID document uploaded successfully');
-                      }}
-                    />
+                      } } uploadType={'documents'}                    />
                   </div>
 
                   <div>
@@ -953,8 +950,7 @@ export default function SellerRegistrationFlow() {
                           taxDocumentPublicId: publicId,
                         });
                         toast.success('Tax document uploaded successfully');
-                      }}
-                    />
+                      } } uploadType={'documents'}                    />
                   </div>
 
                   <div className="flex gap-3 pt-6">

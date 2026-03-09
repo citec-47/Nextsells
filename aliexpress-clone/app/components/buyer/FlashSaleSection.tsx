@@ -26,15 +26,31 @@ export default function FlashSaleSection() {
   useEffect(() => {
     const fetchFlashSaleProducts = async () => {
       try {
-        const response = await fetch('https://dummyjson.com/products?limit=8');
+        const response = await fetch('https://dummyjson.com/products?limit=8', {
+          signal: AbortSignal.timeout(10000), // 10 second timeout
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status}`);
+        }
+        
         const data = await response.json();
-        setProducts(
-          data.products
-            .filter((p: Product) => p.discountPercentage >= 20)
-            .slice(0, 8)
-        );
+        if (data.products && Array.isArray(data.products)) {
+          setProducts(
+            data.products
+              .filter((p: Product) => p.discountPercentage >= 20)
+              .slice(0, 8)
+          );
+        } else {
+          console.warn('Invalid response format from API');
+          setProducts([]); // Show empty instead of crashing
+        }
       } catch (error) {
         console.error('Failed to load flash sale products:', error);
+
+
+        // Silently fail - the component will show a loading state or empty list
+        setProducts([]); // Show empty list instead of error
       } finally {
         setIsLoading(false);
       }

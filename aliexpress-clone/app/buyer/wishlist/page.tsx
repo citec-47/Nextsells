@@ -1,3 +1,4 @@
+import { requireAuth } from '@/lib/auth/protectedRoutes';
 import WishlistPage from '@/app/components/buyer/WishlistPage';
 
 export const metadata = {
@@ -5,6 +6,9 @@ export const metadata = {
   description: 'Your saved items',
 };
 
-export default function BuyerWishlistPage() {
+export default async function BuyerWishlistPage() {
+  // Require authentication to view wishlist
+  await requireAuth();
+  
   return <WishlistPage />;
 }

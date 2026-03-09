@@ -396,3 +396,7 @@ Before going live:
 - [ ] Set up monitoring/logging
 - [ ] Configure rate limiting on registration endpoint
 - [ ] Set up backups for uploaded documents
+- [ ]  mauricendonyi940@gmail.com
+- [ ]    Djam@123
+= [ ]  admin@nextsells.com
+        AdminPass123!

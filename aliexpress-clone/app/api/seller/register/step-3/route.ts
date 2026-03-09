@@ -1,8 +1,9 @@
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'crypto';
 import { extractToken, verifyToken } from '@/lib/auth/jwt';
 import { uploadImage } from '@/lib/cloudinary';
 import { errorResponse, successResponse } from '@/lib/utils/api';
-import { prisma } from '@/lib/prisma';
+import { query } from '@/lib/db';
 
 /**
  * POST /api/seller/register/step-3
@@ -22,15 +23,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Get seller profile
-    const sellerProfile = await prisma.sellerProfile.findUnique({
-      where: { userId: payload.userId },
-    });
+    const profileResult = await query(
+      'SELECT * FROM seller_profiles WHERE user_id = $1',
+      [payload.userId]
+    );
+    const sellerProfile = profileResult.rows[0];
 
     if (!sellerProfile) {
       return errorResponse('Seller profile not found', 404);
     }
 
-    if (sellerProfile.status !== 'IN_PROGRESS') {
+    if (sellerProfile.onboarding_status !== 'IN_PROGRESS') {
       return errorResponse(
         'Seller onboarding is not in progress',
         400,
@@ -50,9 +53,9 @@ export async function POST(request: NextRequest) {
       return errorResponse('Document file is required', 400);
     }
 
-    if (!documentType || !['PASSPORT', 'NATIONAL_ID'].includes(documentType)) {
+    if (!documentType || !['PASSPORT', 'NATIONAL_ID', 'BUSINESS_LICENSE', 'TAX_ID'].includes(documentType)) {
       return errorResponse(
-        'Valid document type is required (PASSPORT, NATIONAL_ID)',
+        'Valid document type is required (PASSPORT, NATIONAL_ID, BUSINESS_LICENSE, TAX_ID)',
         400
       );
     }
@@ -98,38 +101,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Update seller profile to PENDING_REVIEW
-    await prisma.sellerProfile.update({
-      where: { id: sellerProfile.id },
-      data: {
-        status: 'PENDING_REVIEW',
-      },
-    });
+    await query(
+      'UPDATE seller_profiles SET onboarding_status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      ['PENDING_REVIEW', sellerProfile.id]
+    );
 
     // Create seller document record
-    const sellerDoc = await prisma.sellerDocument.create({
-      data: {
-        sellerId: sellerProfile.id,
-        documentType: documentType as 'PASSPORT' | 'NATIONAL_ID',
-        documentNumber: documentNumber.trim(),
-        documentUrl,
-        expiryDate: expiryDate ? new Date(expiryDate) : null,
-        status: 'PENDING',
-      },
-    });
+    const docId = randomUUID();
+    await query(
+      `INSERT INTO seller_documents (id, seller_id, document_type, document_url, status, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [docId, sellerProfile.id, documentType, documentUrl, 'PENDING']
+    );
 
     // Create approval request
-    await prisma.approvalRequest.create({
-      data: {
-        sellerId: sellerProfile.id,
-        status: 'PENDING',
-      },
-    });
+    const reqId = randomUUID();
+    await query(
+      `INSERT INTO approval_requests (id, seller_id, status, submitted_at) 
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
+      [reqId, sellerProfile.id, 'PENDING']
+    );
 
     // Get admin users to notify
-    const admins = await prisma.user.findMany({
-      where: { role: 'ADMIN' },
-      select: { id: true, email: true },
-    });
+    const adminResult = await query(
+      "SELECT id, email FROM users WHERE role = 'ADMIN'",
+      []
+    );
+    const admins = adminResult.rows;
 
     return successResponse(
       {
@@ -137,7 +135,7 @@ export async function POST(request: NextRequest) {
           'Document uploaded successfully. Your account is now pending admin verification.',
         details: {
           sellerId: sellerProfile.id,
-          documentId: sellerDoc.id,
+          documentId: docId,
           status: 'PENDING_REVIEW',
           documentType,
         },
@@ -146,7 +144,7 @@ export async function POST(request: NextRequest) {
         approvalPending: true,
         adminNotified: admins.length > 0,
       },
-      '200'
+      'Document uploaded successfully'
     );
   } catch (error) {
     console.error('Step 3 error:', error);

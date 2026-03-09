@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Heart, ShoppingCart, User, Menu, X, Search, ChevronDown, Store } from 'lucide-react';
+import { Heart, ShoppingCart, User, Menu, X, Search, ChevronDown, Store, LogOut } from 'lucide-react';
 import { useShopState } from '../buyer/ShopStateProvider';
+import { useAuth0User } from '@/lib/auth/auth0Client';
 import TopPromoBanner from './TopPromoBanner';
 
 interface HeaderProps {
@@ -19,6 +20,7 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const categoryMenuRef = useRef<HTMLDivElement>(null);
   const { cartCount, wishlistCount } = useShopState();
+  const { user, isAuthenticated, isLoading } = useAuth0User();
 
   const categoryOptions = [
     'All Categories',
@@ -177,43 +179,117 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
                   className="flex items-center gap-1.5 px-3 py-2 text-gray-700 hover:text-blue-600 transition-colors"
                   aria-label="Account menu"
                 >
-                  <User size={20} />
-                  <span className="text-sm font-medium hidden lg:block">Account</span>
+                  {isAuthenticated && user?.picture ? (
+                    <img
+                      src={user.picture}
+                      alt={user.name || 'User'}
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
+                  ) : (
+                    <User size={20} />
+                  )}
+                  <span className="text-sm font-medium hidden lg:block">
+                    {isLoading ? 'Loading...' : isAuthenticated ? (user?.name?.split(' ')[0] || 'Account') : 'Account'}
+                  </span>
                   <ChevronDown size={16} className="hidden lg:block" />
                 </button>
 
                 {/* Account Dropdown Menu */}
                 {showAccountMenu && (
                   <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <p className="text-xs text-gray-500">Welcome to MarketHub</p>
-                      <p className="text-sm font-semibold text-gray-800 mt-1">Sign in to your account</p>
-                    </div>
-                    <div className="py-2">
-                      <Link
-                        href="/auth/login"
-                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors font-medium"
-                        onClick={() => setShowAccountMenu(false)}
-                      >
-                        Sign In
-                      </Link>
-                      <Link
-                        href="/auth/register"
-                        className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
-                        onClick={() => setShowAccountMenu(false)}
-                      >
-                        Create Account
-                      </Link>
-                    </div>
-                    <div className="border-t border-gray-100 py-2">
-                      <Link
-                        href="/seller/onboarding"
-                        className="block px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors font-medium"
-                        onClick={() => setShowAccountMenu(false)}
-                      >
-                        Start Selling
-                      </Link>
-                    </div>
+                    {isAuthenticated && user ? (
+                      <>
+                        {/* Authenticated User View */}
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <div className="flex items-center gap-3">
+                            {user.picture && (
+                              <img
+                                src={user.picture}
+                                alt={user.name || 'User'}
+                                className="w-10 h-10 rounded-full object-cover"
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
+                              <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="py-2">
+                          <Link
+                            href="/profile"
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors font-medium"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            My Profile
+                          </Link>
+                          <Link
+                            href="/buyer/orders"
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            My Orders
+                          </Link>
+                          <Link
+                            href="/buyer/wishlist"
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            My Wishlist
+                          </Link>
+                        </div>
+                        <div className="border-t border-gray-100 py-2">
+                          <Link
+                            href="/seller/dashboard"
+                            className="block px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors font-medium"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            Seller Dashboard
+                          </Link>
+                          <a
+                            href="/api/auth/logout"
+                            className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            <LogOut size={16} />
+                            Sign Out
+                          </a>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Not Authenticated View */}
+                        <div className="px-4 py-3 border-b border-gray-100">
+                          <p className="text-xs text-gray-500">Welcome to MarketHub</p>
+                          <p className="text-sm font-semibold text-gray-800 mt-1">Sign in to your account</p>
+                        </div>
+                        <div className="py-2">
+                          <a
+                            href="/api/auth/login"
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors font-medium"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            Sign In
+                          </a>
+                          <a
+                            href="/api/auth/login?screen_hint=signup"
+                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            Create Account
+                          </a>
+                        </div>
+                        <div className="border-t border-gray-100 py-2">
+                          <Link
+                            href="/seller/onboarding"
+                            className="block px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors font-medium"
+                            onClick={() => setShowAccountMenu(false)}
+                          >
+                            Start Selling
+                          </Link>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -243,28 +319,79 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
               <Store size={18} />
               Shop
             </Link>
-            <Link
-              href="/auth/accounts"
-              className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              <User size={18} />
-              Sign In / Register
-            </Link>
-            <Link
-              href="/buyer/orders"
-              className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm text-gray-700"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              📦 My Orders
-            </Link>
-            <Link
-              href="/seller/onboarding"
-              className="py-3 px-4 hover:bg-orange-50 rounded-lg text-sm font-medium text-orange-600"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              💼 Start Selling
-            </Link>
+            
+            {isAuthenticated && user ? (
+              <>
+                <Link
+                  href="/profile"
+                  className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {user.picture && (
+                    <img
+                      src={user.picture}
+                      alt={user.name || 'User'}
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
+                  )}
+                  <span className="line-clamp-1">{user.name || 'Profile'}</span>
+                </Link>
+                <Link
+                  href="/buyer/orders"
+                  className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  📦 My Orders
+                </Link>
+                <Link
+                  href="/buyer/wishlist"
+                  className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  ❤️ My Wishlist
+                </Link>
+                <Link
+                  href="/seller/dashboard"
+                  className="py-3 px-4 hover:bg-orange-50 rounded-lg text-sm font-medium text-orange-600 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  💼 Seller Dashboard
+                </Link>
+                <a
+                  href="/api/auth/logout"
+                  className="py-3 px-4 hover:bg-red-50 rounded-lg text-sm font-medium text-red-600 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <LogOut size={16} />
+                  Sign Out
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/api/auth/login"
+                  className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  <User size={18} />
+                  Sign In
+                </a>
+                <a
+                  href="/api/auth/login?screen_hint=signup"
+                  className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-blue-600 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Create Account
+                </a>
+                <Link
+                  href="/seller/onboarding"
+                  className="py-3 px-4 hover:bg-orange-50 rounded-lg text-sm font-medium text-orange-600"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  💼 Start Selling
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       )}

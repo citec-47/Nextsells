@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server';
+import { randomUUID } from 'crypto';
+import bcryptjs from 'bcryptjs';
 import { validatePasswordStrength } from '@/lib/auth/password';
 import { generateToken } from '@/lib/auth/jwt';
 import { validateRequired, validationError, errorResponse, successResponse } from '@/lib/utils/api';
-import { prisma } from '@/lib/prisma';
+import { query } from '@/lib/db';
 
 /**
  * POST /api/seller/register/step-1
@@ -38,49 +40,36 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingUser) {
+    const existingResult = await query('SELECT * FROM users WHERE email = $1', [email]);
+    if (existingResult.rows.length > 0) {
       return validationError({ email: ['Email already registered'] });
     }
 
-    // Create user and seller profile in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create user
-      const user = await tx.user.create({
-        data: {
-          email,
-          password: password, // In production, this would be hashed
-          name,
-          phone,
-          role: 'SELLER',
-        },
-      });
+    // Hash password
+    const hashedPassword = await bcryptjs.hash(password, 10);
 
-      // Create seller profile with IN_PROGRESS status
-      const sellerProfile = await tx.sellerProfile.create({
-        data: {
-          userId: user.id,
-          companyName: '', // Will be updated in step 2
-          businessType: 'Not Specified',
-          businessAddress: '',
-          city: '',
-          state: '',
-          zipCode: '',
-          country: '',
-          status: 'IN_PROGRESS',
-        },
-      });
+    // Create user and seller profile
+    const userId = randomUUID();
+    const sellerProfileId = randomUUID();
 
-      return { user, sellerProfile };
-    });
+    // Create user
+    await query(
+      `INSERT INTO users (id, email, name, role, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [userId, email, name, 'SELLER']
+    );
+
+    // Create seller profile with IN_PROGRESS status
+    await query(
+      `INSERT INTO seller_profiles (id, user_id, company_name, onboarding_status, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [sellerProfileId, userId, '', 'IN_PROGRESS']
+    );
 
     // Generate token
     const token = generateToken({
-      userId: result.user.id,
-      email: result.user.email,
+      userId: userId,
+      email: email,
       role: 'SELLER',
     });
 
@@ -88,12 +77,12 @@ export async function POST(request: NextRequest) {
       {
         message: 'Step 1 complete. Please proceed to logo upload.',
         user: {
-          id: result.user.id,
-          email: result.user.email,
-          name: result.user.name,
+          id: userId,
+          email: email,
+          name: name,
           role: 'SELLER',
         },
-        sellerProfileId: result.sellerProfile.id,
+        sellerProfileId: sellerProfileId,
         token: token,
         currentStep: 1,
         nextStep: 2,

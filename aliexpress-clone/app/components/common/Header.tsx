@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Heart, ShoppingCart, User, Menu, X, Search } from 'lucide-react';
+import { Heart, ShoppingCart, User, Menu, X, Search, LogOut } from 'lucide-react';
 import { useShopState } from '../buyer/ShopStateProvider';
+import { useAuth0User } from '@/lib/auth/auth0Client';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
@@ -13,6 +14,7 @@ export default function Header({ onSearch }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { cartCount, wishlistCount } = useShopState();
+  const { user, isAuthenticated, isLoading } = useAuth0User();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,18 +34,46 @@ export default function Header({ onSearch }: HeaderProps) {
               Become a Seller
             </Link>
           </div>
-          <div className="flex items-center gap-2 md:gap-4">
-            <Link href="/auth/accounts" className="hover:text-white/90 transition-colors hidden sm:inline">
-              Sign In
-            </Link>
-            <span className="text-white/50 hidden sm:inline">|</span>
-            <Link href="/buyer/orders" className="hover:text-white/90 transition-colors hidden sm:inline">
-              Orders
-            </Link>
-            <span className="text-white/50 hidden md:inline">|</span>
-            <Link href="/auth/accounts" className="hover:text-white/90 transition-colors flex items-center gap-1">
-              <User size={14} className="md:hidden" />
-              <span className="hidden md:inline">Account</span>
+          <d{isLoading ? (
+              <span className="text-white/90">Loading...</span>
+            ) : isAuthenticated ? (
+              <>
+                <Link href="/profile" className="hover:text-white/90 transition-colors hidden sm:inline flex items-center gap-1">
+                  {user?.picture && (
+                    <img
+                      src={user.picture}
+                      alt={user.name || 'User'}
+                      className="w-4 h-4 rounded-full object-cover"
+                    />
+                  )}
+                  {user?.name?.split(' ')[0] || 'Profile'}
+                </Link>
+                <span className="text-white/50 hidden sm:inline">|</span>
+                <Link href="/buyer/orders" className="hover:text-white/90 transition-colors hidden sm:inline">
+                  Orders
+                </Link>
+                <span className="text-white/50 hidden md:inline">|</span>
+                <a href="/api/auth/logout" className="hover:text-white/90 transition-colors flex items-center gap-1">
+                  <LogOut size={14} className="md:hidden" />
+                  <span className="hidden md:inline">Sign Out</span>
+                </a>
+              </>
+            ) : (
+              <>
+                <a href="/api/auth/login" className="hover:text-white/90 transition-colors hidden sm:inline">
+                  Sign In
+                </a>
+                <span className="text-white/50 hidden sm:inline">|</span>
+                <Link href="/buyer/orders" className="hover:text-white/90 transition-colors hidden sm:inline">
+                  Orders
+                </Link>
+                <span className="text-white/50 hidden md:inline">|</span>
+                <a href="/api/auth/login" className="hover:text-white/90 transition-colors flex items-center gap-1">
+                  <User size={14} className="md:hidden" />
+                  <span className="hidden md:inline">Sign In</span>
+                </a>
+              </>
+            )} className="hidden md:inline">Account</span>
             </Link>
           </div>
         </div>
@@ -125,34 +155,83 @@ export default function Header({ onSearch }: HeaderProps) {
       {isMobileMenuOpen && (
         <nav className="md:hidden bg-gray-50 border-t" aria-label="Mobile navigation">
           <div className="container mx-auto px-4 py-4 flex flex-col gap-3">
-            <Link
-              href="/auth/accounts"
-              className="py-2 px-4 hover:bg-gray-200 rounded font-semibold text-blue-600"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Sign Up / Register
-            </Link>
-            <Link
-              href="/buyer/orders"
-              className="py-2 px-4 hover:bg-gray-200 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              My Orders
-            </Link>
-            <Link
-              href="/auth/accounts"
-              className="py-2 px-4 hover:bg-gray-200 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              My Account
-            </Link>
-            <Link
-              href="/seller/onboarding"
-              className="py-2 px-4 hover:bg-gray-200 rounded"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              Sell on Nextsells
-            </Link>
+            {isAuthenticated && user ? (
+              <>
+                <Link
+                  href="/profile"
+                  className="py-2 px-4 hover:bg-gray-200 rounded font-semibold text-blue-600 flex items-center gap-2"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {user.picture && (
+                    <img
+                      src={user.picture}
+                      alt={user.name || 'User'}
+                      className="w-5 h-5 rounded-full object-cover"
+                    />
+                  )}
+                  My Profile
+                </Link>
+                <Link
+                  href="/buyer/orders"
+                  className="py-2 px-4 hover:bg-gray-200 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  My Orders
+                </Link>
+                <Link
+                  href="/buyer/wishlist"
+                  className="py-2 px-4 hover:bg-gray-200 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  My Wishlist
+                </Link>
+                <Link
+                  href="/seller/dashboard"
+                  className="py-2 px-4 hover:bg-gray-200 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Seller Dashboard
+                </Link>
+                <a
+                  href="/api/auth/logout"
+                  className="py-2 px-4 hover:bg-red-200 rounded text-red-600 font-semibold"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Sign Out
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/api/auth/login"
+                  className="py-2 px-4 hover:bg-gray-200 rounded font-semibold text-blue-600"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Sign In
+                </a>
+                <a
+                  href="/api/auth/login?screen_hint=signup"
+                  className="py-2 px-4 hover:bg-gray-200 rounded font-semibold text-blue-600"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Create Account
+                </a>
+                <Link
+                  href="/buyer/orders"
+                  className="py-2 px-4 hover:bg-gray-200 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  My Orders
+                </Link>
+                <Link
+                  href="/seller/onboarding"
+                  className="py-2 px-4 hover:bg-gray-200 rounded"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  Sell on Nextsells
+                </Link>
+              </>
+            )}
           </div>
         </nav>
       )}

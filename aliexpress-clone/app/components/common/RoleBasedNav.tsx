@@ -1,10 +1,13 @@
 'use client';
 
 import { useUserRole } from '@/app/hooks/useUserRole';
+import { useAuth0User } from '@/lib/auth/auth0Client';
 import Link from 'next/link';
+import { LogOut } from 'lucide-react';
 
 export default function RoleBasedNav() {
   const { isSeller, isAdmin, isBuyer } = useUserRole();
+  const { user, isAuthenticated, isLoading } = useAuth0User();
 
   return (
     <nav className="bg-white shadow-sm">
@@ -14,13 +17,15 @@ export default function RoleBasedNav() {
             Nextsells
           </Link>
 
-          <div className="flex gap-6">
+          <div className="flex gap-6 items-center">
+            {/* Common Links */}
+            <Link href="/buyer/products" className="text-gray-600 hover:text-blue-600">
+              Shop
+            </Link>
+
             {/* Buyer Links */}
-            {isBuyer && (
+            {isAuthenticated && isBuyer && (
               <>
-                <Link href="/buyer/products" className="text-gray-600 hover:text-blue-600">
-                  Shop
-                </Link>
                 <Link href="/buyer/cart" className="text-gray-600 hover:text-blue-600">
                   Cart
                 </Link>
@@ -31,7 +36,7 @@ export default function RoleBasedNav() {
             )}
 
             {/* Seller Links */}
-            {isSeller && (
+            {isAuthenticated && isSeller && (
               <>
                 <Link href="/seller/products" className="text-gray-600 hover:text-blue-600">
                   Products
@@ -43,7 +48,7 @@ export default function RoleBasedNav() {
             )}
 
             {/* Admin Links */}
-            {isAdmin && (
+            {isAuthenticated && isAdmin && (
               <>
                 <Link href="/admin/dashboard" className="text-gray-600 hover:text-blue-600">
                   Admin
@@ -54,10 +59,50 @@ export default function RoleBasedNav() {
               </>
             )}
 
-            {/* Common Links */}
-            <Link href="/profile" className="text-gray-600 hover:text-blue-600">
-              Profile
-            </Link>
+            {/* Auth Section */}
+            <div className="flex items-center gap-3 pl-6 border-l border-gray-200">
+              {isLoading ? (
+                <span className="text-gray-600 text-sm">Loading...</span>
+              ) : isAuthenticated && user ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    {user.picture && (
+                      <img
+                        src={user.picture}
+                        alt={user.name || 'User'}
+                        className="w-6 h-6 rounded-full object-cover"
+                      />
+                    )}
+                    <span className="text-sm font-semibold text-gray-800">{user.name?.split(' ')[0]}</span>
+                  </div>
+                  <Link href="/profile" className="text-gray-600 hover:text-blue-600 text-sm">
+                    Profile
+                  </Link>
+                  <a
+                    href="/api/auth/logout"
+                    className="text-red-600 hover:text-red-700 flex items-center gap-1"
+                  >
+                    <LogOut size={16} />
+                    <span className="text-sm">Logout</span>
+                  </a>
+                </>
+              ) : (
+                <>
+                  <a
+                    href="/api/auth/login"
+                    className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
+                  >
+                    Sign In
+                  </a>
+                  <a
+                    href="/api/auth/login?screen_hint=signup"
+                    className="text-green-600 hover:text-green-700 font-semibold text-sm"
+                  >
+                    Sign Up
+                  </a>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

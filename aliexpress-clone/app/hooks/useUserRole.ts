@@ -1,3 +1,5 @@
+import { extractRolesFromUser } from '@/lib/auth/roles';
+
 // @ts-ignore
 let useUser: any;
 try {
@@ -7,14 +9,9 @@ try {
   useUser = () => ({ user: null, isLoading: false });
 }
 
-const ROLE_CLAIM = 'https://nextsells.example/roles';
-
 export function useUserRole() {
   const { user, isLoading } = useUser();
-
-  const roles = ((user?.[ROLE_CLAIM] as string[] | undefined) || []).map((r) =>
-    r.toLowerCase()
-  );
+  const { roles } = extractRolesFromUser(user);
 
   const hasRole = (role: string | string[]) => {
     const rolesArray = Array.isArray(role) ? role : [role];

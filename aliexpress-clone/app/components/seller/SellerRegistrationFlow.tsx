@@ -1,3 +1,4 @@
+/* eslint-disable react/no-unescaped-entities */
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -38,6 +39,11 @@ interface Step2Data {
 }
 
 interface Step3Data {
+  documentType: string | number | readonly string[] | undefined;
+  documentNumber: string | number | readonly string[] | undefined;
+  expiryDate: string | number | readonly string[] | undefined;
+  documentUrl: string | undefined;
+  documentPublicId?: string;
   country: string;
   streetAddress: string;
   city: string;
@@ -842,7 +848,13 @@ export default function SellerRegistrationFlow() {
               </div>
 
               <button
-                onClick={() => router.push('/seller/dashboard')}
+                onClick={() => {
+                  // Save the JWT token to localStorage for dashboard access
+                  if (registrationState.token) {
+                    localStorage.setItem('sellerToken', registrationState.token);
+                  }
+                  router.push('/seller/dashboard');
+                }}
                 className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
               >
                 Go to Dashboard

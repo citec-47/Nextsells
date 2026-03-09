@@ -1,3 +1,4 @@
+import { requireRole } from '@/lib/auth/protectedRoutes';
 import ProductListingForm from '@/app/components/seller/ProductListingForm';
 
 export const metadata = {
@@ -5,6 +6,9 @@ export const metadata = {
   description: 'Create and list a new product with profit margins',
 };
 
-export default function ProductListingPage() {
+export default async function ProductListingPage() {
+  // Require seller role to list products
+  await requireRole(['seller']);
+  
   return <ProductListingForm />;
 }
