@@ -1,4 +1,4 @@
-import { requireAuth, checkAndLogRoles } from '@/lib/auth/protectedRoutes';
+import { requireAuth } from '@/lib/auth/protectedRoutes';
 import SellerDashboard from '@/app/components/seller/SellerDashboard';
 
 export const metadata = {
@@ -8,9 +8,7 @@ export const metadata = {
 
 export default async function SellerDashboardPage() {
   // Require authentication to access this page
-  const session = await requireAuth();
-  // Log roles for debugging
-  await checkAndLogRoles(session);
+  await requireAuth();
 
   return (
     <div className="min-h-screen bg-gray-50">

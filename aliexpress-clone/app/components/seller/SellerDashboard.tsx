@@ -1,17 +1,13 @@
 'use client';
-/* eslint-disable @next/next/no-img-element */
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  LayoutDashboard,
   Store,
   Plus,
   ShoppingCart,
-  CreditCard,
   MessageSquare,
   BarChart3,
-  LogOut,
   TrendingUp,
   Package,
   Wallet,
@@ -20,13 +16,9 @@ import {
   HandCoins,
   Receipt,
   Clock3,
-  Bell,
-  Shield,
-  ChevronDown,
   ArrowRight,
 } from 'lucide-react';
 import { useAuth0User } from '@/lib/auth/auth0Client';
-import { usePlatformBrand } from '@/app/hooks/usePlatformBrand';
 
 interface DashboardStats {
   totalProducts: number;
@@ -58,7 +50,6 @@ export default function SellerDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const { user } = useAuth0User();
-  const { platformName } = usePlatformBrand();
   const [storeName, setStoreName] = useState('');
   const [storeStatus, setStoreStatus] = useState('');
   const [activeRange, setActiveRange] = useState<RangeKey>('30D');
@@ -87,24 +78,6 @@ export default function SellerDashboard() {
     fetchStats();
   }, []);
 
-  const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/seller/dashboard', active: true },
-    { icon: Store, label: 'My Store', href: '/seller/store' },
-    { icon: Plus, label: 'Add Products', href: '/seller/products' },
-    { icon: ShoppingCart, label: 'Orders', href: '/seller/orders' },
-    { icon: CreditCard, label: 'Payments', href: '/seller/payments' },
-    { icon: MessageSquare, label: 'Messages', href: '/seller/messages' },
-  ];
-
-  const getInitials = (name: string) =>
-    name
-      .trim()
-      .split(/\s+/)
-      .map((p) => p[0] ?? '')
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-
   const fullMoney = (amount: number) =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -114,12 +87,12 @@ export default function SellerDashboard() {
     }).format(amount);
 
   const quickActions = [
+    { icon: Store, label: 'My Store', href: '/seller/store', tone: 'bg-sky-600' },
     { icon: Plus, label: 'Add Product', href: '/seller/products', tone: 'bg-blue-600' },
-    { icon: ShoppingCart, label: 'View Orders', href: '/seller/orders', tone: 'bg-violet-600' },
-    { icon: HandCoins, label: 'Withdraw', href: '/seller/payments', tone: 'bg-teal-600' },
-    { icon: CreditCard, label: 'Take a Loan', href: '/seller/loans', tone: 'bg-amber-600' },
-    { icon: BarChart3, label: 'Analytics', href: '/seller/analytics', tone: 'bg-emerald-600' },
+    { icon: ShoppingCart, label: 'Orders', href: '/seller/orders', tone: 'bg-violet-600' },
+    { icon: HandCoins, label: 'Payments', href: '/seller/payments', tone: 'bg-teal-600' },
     { icon: MessageSquare, label: 'Messages', href: '/seller/messages', tone: 'bg-indigo-600' },
+    { icon: BarChart3, label: 'Manage Products', href: '/seller/products', tone: 'bg-emerald-600' },
   ];
 
   const pendingOrders = Math.max(stats?.totalProducts ? stats.totalProducts - stats.publishedProducts : 0, 0);
@@ -130,8 +103,6 @@ export default function SellerDashboard() {
   const totalOrders = stats?.totalOrders ?? 0;
   const publishedProducts = stats?.publishedProducts ?? 0;
   const firstName = user?.name?.split(' ')[0] || 'User';
-  const brandIsHub = platformName.endsWith('Hub');
-  const brandHead = brandIsHub ? platformName.slice(0, -3) : platformName;
 
   const trendLabels = [
     'Feb 14', 'Feb 16', 'Feb 18', 'Feb 20', 'Feb 22', 'Feb 24', 'Feb 26', 'Feb 28',
@@ -193,92 +164,7 @@ export default function SellerDashboard() {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#edf1f7] text-slate-900">
-      {/* Sidebar */}
-      <aside className="hidden w-[224px] flex-col bg-[#1f456d] text-white shadow-lg lg:flex">
-        <div className="border-b border-white/10 px-5 py-5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-[#1f456d]">
-              <Shield size={20} strokeWidth={2.5} />
-            </div>
-            <h1 className="text-[24px] font-bold leading-none tracking-tight">
-              <span className="text-white">{brandHead}</span>
-              {brandIsHub ? <span className="text-amber-400">Hub</span> : null}
-            </h1>
-          </div>
-        </div>
-
-        <nav className="mt-4 space-y-1 px-2.5">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`mx-1.5 flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
-                  item.active
-                    ? 'bg-white text-[#173b62]'
-                    : 'text-white/85 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <Icon size={16} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* User Profile at Bottom */}
-        <div className="mt-auto border-t border-white/10 p-5">
-          <div className="flex items-center gap-3">
-            {user?.picture ? (
-              <img
-                src={user.picture}
-                alt={user.name || 'User'}
-                className="w-10 h-10 rounded-full object-cover"
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-sm font-semibold text-white">
-                {user?.name ? getInitials(user.name) : 'U'}
-              </div>
-            )}
-            <div className="flex-1">
-              <p className="truncate text-sm font-semibold leading-none tracking-tight text-white">{user?.name || 'Seller'}</p>
-              <div className="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                Seller
-              </div>
-            </div>
-          </div>
-          <Link
-            href="/auth/logout"
-            className="mt-3 inline-flex items-center gap-2 text-xs text-white/75 transition-colors hover:text-white"
-          >
-            <LogOut size={14} />
-            <span>Logout</span>
-          </Link>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-end gap-5">
-            <button className="text-slate-500 transition-colors hover:text-slate-700" type="button" aria-label="Notifications">
-              <Bell size={20} />
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1f456d] text-sm font-semibold text-white">
-                {user?.name ? getInitials(user.name) : 'U'}
-              </div>
-              <div className="hidden sm:flex items-center gap-1">
-                <p className="text-sm font-semibold text-slate-700">{firstName}</p>
-                <ChevronDown size={14} className="text-slate-500" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-4 py-4 sm:px-5 lg:px-6">
+    <div className="px-4 py-4 sm:px-5 lg:px-6">
           {/* Account Under Review Banner */}
           {storeStatus && storeStatus !== 'APPROVED' && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3">
@@ -554,8 +440,6 @@ export default function SellerDashboard() {
 
             </>
           ) : null}
-        </div>
-      </main>
     </div>
   );
 }
