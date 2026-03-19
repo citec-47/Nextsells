@@ -1,15 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-// @ts-ignore
-let useUser: any;
-try {
-  const m = require('@auth0/nextjs-auth0/client');
-  useUser = m.useUser;
-} catch (e) {
-  useUser = () => ({ user: null, isLoading: false });
-}
 import Image from 'next/image';
+import { useAuth0User } from '@/lib/auth/auth0Client';
 
 interface ProfileData {
   name: string;
@@ -21,7 +14,7 @@ interface ProfileData {
 }
 
 export default function ProfileSettingsClient() {
-  const { user, isLoading } = useUser();
+  const { user, isLoading } = useAuth0User();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);

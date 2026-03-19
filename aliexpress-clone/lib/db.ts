@@ -44,16 +44,15 @@ const getDatabaseUrl = (): string => {
   if (!dbUrl) {
     throw new Error('DATABASE_URL environment variable is not set');
   }
-  
-  // Ensure proper SSL mode is set to fix pg-connection-string warning
+
+  // Explicitly use verify-full so pg does not warn about alias SSL modes.
   if (!dbUrl.includes('sslmode=')) {
-    // Add sslmode=require if not already present
-    return dbUrl.includes('?') 
-      ? `${dbUrl}&sslmode=require`
-      : `${dbUrl}?sslmode=require`;
+    return dbUrl.includes('?')
+      ? `${dbUrl}&sslmode=verify-full`
+      : `${dbUrl}?sslmode=verify-full`;
   }
-  
-  return dbUrl;
+
+  return dbUrl.replace(/sslmode=(prefer|require|verify-ca)/i, 'sslmode=verify-full');
 };
 
 const pool = new Pool({
@@ -70,7 +69,8 @@ const pool = new Pool({
 // Test the connection
 pool.on('error', (err) => {
   console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  // Do not terminate the web server on transient database pool errors.
+  // Let request-level retry/error handling decide how to proceed.
 });
 
 pool.on('connect', () => {

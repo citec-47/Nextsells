@@ -460,6 +460,7 @@ export default function SellerRegistrationFlow() {
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
+                  {/* eslint-disable-next-line @next/next/no-inline-styles */}
                   <div
                     className="bg-blue-600 h-2 rounded-full transition-all duration-500"
                     style={{ width: `${progressPercentage}%` }}
@@ -688,7 +689,17 @@ export default function SellerRegistrationFlow() {
                           logoPublicId: publicId,
                         });
                         toast.success('Logo uploaded successfully');
-                      } } uploadType={'documents'}                    />
+                      }}
+                      uploadType="logos"
+                      preview={step2Data.logo}
+                      onRemove={() => {
+                        setStep2Data({
+                          ...step2Data,
+                          logo: undefined,
+                          logoPublicId: undefined,
+                        });
+                      }}
+                    />
                   </div>
 
                   <div className="flex gap-3 pt-6">
@@ -935,7 +946,17 @@ export default function SellerRegistrationFlow() {
                           governmentIdPublicId: publicId,
                         });
                         toast.success('ID document uploaded successfully');
-                      } } uploadType={'documents'}                    />
+                      }}
+                      uploadType="documents"
+                      preview={step4Data.governmentIdUrl}
+                      onRemove={() => {
+                        setStep4Data({
+                          ...step4Data,
+                          governmentIdUrl: '',
+                          governmentIdPublicId: '',
+                        });
+                      }}
+                    />
                   </div>
 
                   <div>
@@ -950,7 +971,17 @@ export default function SellerRegistrationFlow() {
                           taxDocumentPublicId: publicId,
                         });
                         toast.success('Tax document uploaded successfully');
-                      } } uploadType={'documents'}                    />
+                      }}
+                      uploadType="documents"
+                      preview={step4Data.taxDocumentUrl}
+                      onRemove={() => {
+                        setStep4Data({
+                          ...step4Data,
+                          taxDocumentUrl: undefined,
+                          taxDocumentPublicId: undefined,
+                        });
+                      }}
+                    />
                   </div>
 
                   <div className="flex gap-3 pt-6">

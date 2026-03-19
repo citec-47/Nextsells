@@ -1,25 +1,26 @@
-import { NextRequest } from 'next/server';
-import { auth0 } from '@/lib/auth0';
+import { NextResponse } from 'next/server';
 
-export async function GET(req: NextRequest) {
-  try {
-    console.log('[AUTH] Logout initiated');
-    const response = await auth0.middleware(req);
-    console.log('[AUTH] Logout completed');
-    return response;
-  } catch (error) {
-    console.error('[AUTH ERROR] Logout failed:', error);
-    throw error;
-  }
+export async function GET() {
+  const res = NextResponse.redirect(new URL('/', process.env.AUTH0_BASE_URL || 'http://localhost:3000'));
+  res.cookies.set('nextsells_token', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  });
+  return res;
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    console.log('[AUTH] Logout initiated (POST)');
-    return await auth0.middleware(req);
-  } catch (error) {
-    console.error('[AUTH ERROR] Logout failed:', error);
-    throw error;
-  }
+export async function POST() {
+  const res = NextResponse.json({ success: true });
+  res.cookies.set('nextsells_token', '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  });
+  return res;
 }
 

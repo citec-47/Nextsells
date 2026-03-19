@@ -1,15 +1,15 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useUser } from '@auth0/nextjs-auth0/client';
 import { useRouter, usePathname } from 'next/navigation';
+import { useAuth0User } from '@/lib/auth/auth0Client';
 
 /**
  * Client-side authentication state monitor
  * Tracks auth state changes and logs for debugging
  */
 export function AuthStateMonitor() {
-  const { user, error, isLoading } = useUser();
+  const { user, error, isLoading, isAuthenticated } = useAuth0User();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -34,7 +34,7 @@ export function AuthStateMonitor() {
 
   // Handle session expiration
   useEffect(() => {
-    if (!isLoading && !user && !error) {
+    if (!isLoading && !isAuthenticated && !error) {
       const protectedRoutes = [
         '/admin',
         '/seller',
@@ -48,10 +48,10 @@ export function AuthStateMonitor() {
 
       if (isProtectedRoute) {
         console.warn('[AUTH STATE] Session expired on protected route, redirecting to login');
-        router.push('/api/auth/login');
+        router.push('/auth/login');
       }
     }
-  }, [isLoading, user, error, pathname, router]);
+  }, [isLoading, isAuthenticated, error, pathname, router]);
 
   return null; // This is a utility component, renders nothing
 }

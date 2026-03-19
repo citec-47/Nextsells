@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import {
   Search,
@@ -9,10 +10,15 @@ import {
   Upload,
   ChevronLeft,
   ChevronRight,
+  GripVertical,
+  Eye,
+  EyeOff,
+  Info,
   Store,
   Percent,
   Rocket,
   Check,
+  TrendingUp,
 } from 'lucide-react';
 
 interface ProductFormData {
@@ -32,6 +38,7 @@ interface CatalogProduct {
   description: string;
   category: string;
   basePrice: number;
+  discountPercentage?: number;
   stock: number;
   brand: string;
   rating: number;
@@ -51,6 +58,9 @@ type CatalogResponse = {
 };
 
 const CATALOG_PAGE_SIZE = 12;
+const MARGIN_MIN = 15;
+const MARGIN_MAX = 25;
+const MARGIN_PRESETS = [15, 20, 25] as const;
 const CATEGORY_OPTIONS = [
   { label: 'Beauty', value: 'beauty' },
   { label: 'Fragrances', value: 'fragrances' },
@@ -79,6 +89,7 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function ProductListingForm() {
+  const router = useRouter();
   const [formData, setFormData] = useState<ProductFormData>({
     title: '',
     description: '',
@@ -102,6 +113,15 @@ export default function ProductListingForm() {
   const [publishedCount, setPublishedCount] = useState(0);
   const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
   const [isBulkPublishing, setIsBulkPublishing] = useState(false);
+  const [productMargins, setProductMargins] = useState<Record<number, number>>({});
+  const [visibleProducts, setVisibleProducts] = useState<Set<number>>(new Set());
+  const [publishOrder, setPublishOrder] = useState<number[]>([]);
+
+  const redirectToDashboard = () => {
+    window.setTimeout(() => {
+      router.push('/seller/dashboard');
+    }, 400);
+  };
 
   const totalCatalogPages = Math.max(1, Math.ceil(catalogTotal / CATALOG_PAGE_SIZE));
 
@@ -146,6 +166,22 @@ export default function ProductListingForm() {
   }, [catalogProducts, selectedCategories]);
 
   const totalProductsShown = filteredProducts.length;
+
+  const selectedMarginProducts = useMemo(
+    () => catalogProducts.filter((product) => selectedProducts.has(product.externalId)),
+    [catalogProducts, selectedProducts]
+  );
+
+  const selectedProductMap = useMemo(() => {
+    return new Map(selectedMarginProducts.map((product) => [product.externalId, product]));
+  }, [selectedMarginProducts]);
+
+  const arrangedProducts = useMemo(() => {
+    if (publishOrder.length === 0) return selectedMarginProducts;
+    return publishOrder
+      .map((id) => selectedProductMap.get(id))
+      .filter((product): product is CatalogProduct => Boolean(product));
+  }, [publishOrder, selectedMarginProducts, selectedProductMap]);
 
   const toggleCategory = (value: string) => {
     setSelectedCategories((current) =>
@@ -203,6 +239,210 @@ export default function ProductListingForm() {
     [calculatedPrice, formData.basePrice]
   );
 
+  const stockValue = useMemo(() => {
+    const parsed = parseInt(formData.stock || '0', 10);
+    return Number.isNaN(parsed) ? 0 : Math.max(0, parsed);
+  }, [formData.stock]);
+
+  const estimatedStockProfit = useMemo(() => {
+    return Number((profitPerUnit * stockValue).toFixed(2));
+  }, [profitPerUnit, stockValue]);
+
+  const marginValue = useMemo(() => {
+    const parsed = parseFloat(formData.profitMargin || '20');
+    if (Number.isNaN(parsed)) return 20;
+    return Math.min(MARGIN_MAX, Math.max(MARGIN_MIN, parsed));
+  }, [formData.profitMargin]);
+
+  const applyMargin = (margin: number) => {
+    const basePrice = parseFloat(formData.basePrice || '0');
+    const safeMargin = Math.min(MARGIN_MAX, Math.max(MARGIN_MIN, margin));
+    setFormData((prev) => ({ ...prev, profitMargin: `${safeMargin}` }));
+    if (!Number.isNaN(basePrice) && basePrice > 0) {
+      const sellingPrice = basePrice + (basePrice * safeMargin) / 100;
+      setCalculatedPrice(Number(sellingPrice.toFixed(2)));
+    }
+  };
+
+  const getProductMargin = (externalId: number) => {
+    return productMargins[externalId] ?? 20;
+  };
+
+  const applyMarginToProduct = (externalId: number, margin: number) => {
+    const safeMargin = Math.min(MARGIN_MAX, Math.max(MARGIN_MIN, margin));
+    setProductMargins((prev) => ({ ...prev, [externalId]: safeMargin }));
+  };
+
+  const applyMarginToAllSelected = (margin: number) => {
+    const safeMargin = Math.min(MARGIN_MAX, Math.max(MARGIN_MIN, margin));
+    if (selectedMarginProducts.length === 0) {
+      applyMargin(safeMargin);
+      return;
+    }
+    setProductMargins((prev) => {
+      const next = { ...prev };
+      for (const product of selectedMarginProducts) {
+        next[product.externalId] = safeMargin;
+      }
+      return next;
+    });
+  };
+
+  const estimatedSelectedStockProfit = useMemo(() => {
+    if (selectedMarginProducts.length === 0) return estimatedStockProfit;
+    const total = selectedMarginProducts.reduce((sum, product) => {
+      const margin = getProductMargin(product.externalId);
+      const profit = (product.basePrice * margin) / 100;
+      return sum + profit * product.stock;
+    }, 0);
+    return Number(total.toFixed(2));
+  }, [selectedMarginProducts, productMargins, estimatedStockProfit]);
+
+  const selectedPresetMargin = useMemo(() => {
+    if (selectedMarginProducts.length === 0) return marginValue;
+    const first = getProductMargin(selectedMarginProducts[0].externalId);
+    const allSame = selectedMarginProducts.every((product) => getProductMargin(product.externalId) === first);
+    return allSame ? first : null;
+  }, [selectedMarginProducts, productMargins, marginValue]);
+
+  const visibleSelectedCount = visibleProducts.size;
+
+  const saveMarginArrangement = async () => {
+    if (selectedMarginProducts.length === 0) {
+      await handleSubmit(new Event('submit') as unknown as React.FormEvent);
+      return;
+    }
+    setPublishOrder(selectedMarginProducts.map((product) => product.externalId));
+    setVisibleProducts(new Set());
+    setWizardStep(4);
+  };
+
+  const toggleProductVisibility = (id: number) => {
+    setVisibleProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const selectAllVisibleProducts = () => {
+    setVisibleProducts(new Set(arrangedProducts.map((product) => product.externalId)));
+  };
+
+  const publishProductsByIds = async (ids: number[]) => {
+    const token = localStorage.getItem('token');
+
+    if (ids.length === 0) {
+      toast.error('No products selected to publish');
+      return;
+    }
+
+    const publishQueue = Array.from(new Set(ids))
+      .map((id) => {
+        const product = selectedProductMap.get(id);
+        if (!product) return null;
+        return { id, product };
+      })
+      .filter((item): item is { id: number; product: CatalogProduct } => Boolean(item));
+
+    if (publishQueue.length === 0) {
+      toast.error('No products selected to publish');
+      return;
+    }
+
+    setIsBulkPublishing(true);
+    let successCount = 0;
+    let failCount = 0;
+    const successfulIds: number[] = [];
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const queue = [...publishQueue];
+      const workerCount = Math.min(4, queue.length);
+      const workers = Array.from({ length: workerCount }, () => (async () => {
+        while (queue.length > 0) {
+          const next = queue.shift();
+          if (!next) break;
+
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 15000);
+
+          try {
+            const response = await fetch('/api/seller/products/import', {
+              method: 'POST',
+              credentials: 'include',
+              headers,
+              signal: controller.signal,
+              body: JSON.stringify({
+                ...next.product,
+                profitMargin: getProductMargin(next.id),
+              }),
+            });
+
+            let data: { success?: boolean; error?: string } | null = null;
+            try {
+              data = (await response.json()) as { success?: boolean; error?: string };
+            } catch {
+              data = null;
+            }
+
+            if (!response.ok || !data?.success) {
+              failCount++;
+              continue;
+            }
+
+            successCount++;
+            successfulIds.push(next.id);
+          } catch {
+            failCount++;
+          } finally {
+            window.clearTimeout(timeout);
+          }
+        }
+      })());
+
+      await Promise.all(workers);
+    } finally {
+      setIsBulkPublishing(false);
+    }
+
+    setPublishedCount((current) => current + successCount);
+
+    if (successfulIds.length > 0) {
+      setSelectedProducts((prev) => {
+        const next = new Set(prev);
+        successfulIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setVisibleProducts((prev) => {
+        const next = new Set(prev);
+        successfulIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setPublishOrder((prev) => prev.filter((id) => !successfulIds.includes(id)));
+    }
+
+    if (failCount === 0) {
+      toast.success(`${successCount} product${successCount !== 1 ? 's' : ''} published to your store!`);
+      redirectToDashboard();
+      if (arrangedProducts.length === successCount) {
+        setWizardStep(2);
+      }
+    } else {
+      toast.error(`${successCount} published, ${failCount} failed.`);
+    }
+  };
+
   const toggleProductSelection = (id: number) => {
     setSelectedProducts((prev) => {
       const next = new Set(prev);
@@ -218,6 +458,14 @@ export default function ProductListingForm() {
 
   const deselectAllProducts = () => {
     setSelectedProducts(new Set());
+  };
+
+  const goToMarginsStep = () => {
+    if (selectedProducts.size === 0 && filteredProducts.length > 0) {
+      setSelectedProducts(new Set(filteredProducts.map((product) => product.externalId)));
+      toast.success('Products auto-selected for margin setup');
+    }
+    setWizardStep(3);
   };
 
   const bulkPublishSelected = async () => {
@@ -257,6 +505,7 @@ export default function ProductListingForm() {
     if (failCount === 0) {
       toast.success(`${successCount} product${successCount !== 1 ? 's' : ''} published to your store!`);
       setWizardStep(4);
+      redirectToDashboard();
     } else {
       toast.error(`${successCount} published, ${failCount} failed.`);
     }
@@ -305,6 +554,7 @@ export default function ProductListingForm() {
       setPublishedCount((current) => current + 1);
       setWizardStep(4);
       toast.success('Catalog product published to your store');
+      redirectToDashboard();
     } catch (error) {
       console.error('Import error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to publish catalog product');
@@ -363,6 +613,7 @@ export default function ProductListingForm() {
       setPublishedCount((current) => current + 1);
       setWizardStep(4);
       toast.success('Product published successfully');
+      redirectToDashboard();
       setFormData({
         title: '',
         description: '',
@@ -625,7 +876,7 @@ export default function ProductListingForm() {
                   <button type="button" onClick={() => setWizardStep(1)} className="rounded-md border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700">
                     Back
                   </button>
-                  <button type="button" onClick={() => setWizardStep(3)} className="rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-white">
+                  <button type="button" onClick={goToMarginsStep} className="rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-white">
                     Next: Set Margins
                   </button>
                 </div>
@@ -633,60 +884,242 @@ export default function ProductListingForm() {
             )}
 
             {wizardStep === 3 && (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
-                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-indigo-700">
-                    <Percent size={16} />
-                    Configure Product And Margins
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 md:p-5">
+                  <div className="mb-4 text-center">
+                    <h3 className="text-4xl font-semibold text-slate-900">Set Profit Margins</h3>
+                    <p className="mt-1 text-sm text-slate-500">Slide to set your markup on each product. Range: {MARGIN_MIN}% - {MARGIN_MAX}%.</p>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <input name="title" value={formData.title} onChange={handleInputChange} placeholder="Product title" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                    <input name="sku" value={formData.sku} onChange={handleInputChange} placeholder="SKU" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                    <input name="basePrice" type="number" value={formData.basePrice} onChange={handleInputChange} placeholder="Base price" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                    <input name="profitMargin" type="number" value={formData.profitMargin} onChange={handleInputChange} placeholder="Margin %" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                    <input name="stock" type="number" value={formData.stock} onChange={handleInputChange} placeholder="Stock" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                    <select name="category" value={formData.category} onChange={handleInputChange} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                      {CATEGORY_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
+
+                  <div className="mb-3 flex flex-col gap-3 rounded-lg bg-slate-100 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                    <p className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <TrendingUp size={16} className="text-emerald-600" />
+                      Est. profit on full stock:
+                      <span className="font-bold text-emerald-700">${estimatedSelectedStockProfit.toFixed(2)}</span>
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <span>Set all:</span>
+                      {MARGIN_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => applyMarginToAllSelected(preset)}
+                          className={`rounded-full border px-3 py-1 font-semibold transition ${
+                            selectedPresetMargin === preset
+                              ? 'border-slate-800 bg-slate-800 text-white'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-slate-400'
+                          }`}
+                        >
+                          {preset}%
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
-                  <textarea name="description" value={formData.description} onChange={handleInputChange} placeholder="Description" rows={3} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-                </div>
 
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <p className="text-sm font-semibold text-slate-700">Calculated Selling Price</p>
-                  <p className="mt-1 text-2xl font-bold text-indigo-600">${calculatedPrice.toFixed(2)}</p>
-                  <p className="text-xs text-slate-500">Profit per unit: ${profitPerUnit.toFixed(2)}</p>
-                </div>
-
-                <div className="rounded-lg border-2 border-dashed border-slate-300 p-4">
-                  <input type="file" id="images" multiple accept="image/*" onChange={handleImageChange} className="hidden" />
-                  <label htmlFor="images" className="block cursor-pointer text-center text-sm text-slate-600">Upload product images</label>
-                </div>
-
-                {formData.images.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {formData.images.map((image, index) => (
-                      <div key={`${image.name}-${index}`} className="relative overflow-hidden rounded-md border border-slate-200">
-                        <img src={URL.createObjectURL(image)} alt={`Preview ${index + 1}`} className="h-24 w-full object-cover" />
-                        <button type="button" onClick={() => removeImage(index)} className="absolute right-1 top-1 rounded bg-red-600 px-2 py-1 text-[10px] font-semibold text-white">X</button>
+                  {selectedMarginProducts.length > 0 ? (
+                    <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1">
+                      {selectedMarginProducts.map((product) => {
+                        const margin = getProductMargin(product.externalId);
+                        const buyerPrice = Number((product.basePrice * (1 + margin / 100)).toFixed(2));
+                        const unitProfit = Number((buyerPrice - product.basePrice).toFixed(2));
+                        return (
+                          <div key={product.externalId} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <img src={product.thumbnail} alt={product.title} className="h-10 w-10 rounded-md object-cover" />
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-semibold text-slate-800">{product.title}</p>
+                                  <p className="text-xs text-slate-500">
+                                    Base: ${product.basePrice.toFixed(2)}
+                                    {product.discountPercentage && product.discountPercentage > 0 ? (
+                                      <span className="ml-2 font-semibold text-rose-500">-{product.discountPercentage.toFixed(0)}%</span>
+                                    ) : null}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-xl font-semibold text-slate-800">{margin.toFixed(1)}%</p>
+                                <p className="text-sm font-bold text-slate-900">${buyerPrice.toFixed(2)}</p>
+                                <p className="text-[11px] text-slate-400">Buyer pays: ${(buyerPrice - unitProfit).toFixed(2)}</p>
+                                <p className="text-xs font-medium text-emerald-600">+${unitProfit.toFixed(2)}</p>
+                              </div>
+                            </div>
+                            <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+                              <span>{MARGIN_MIN}%</span>
+                              <span>{MARGIN_MAX}%</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={MARGIN_MIN}
+                              max={MARGIN_MAX}
+                              step={0.1}
+                              value={margin}
+                              onChange={(event) => applyMarginToProduct(product.externalId, Number(event.target.value))}
+                              className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-slate-300"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                      <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+                        <div className="mb-3 text-sm font-semibold text-indigo-700">Product details</div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <input name="title" value={formData.title} onChange={handleInputChange} placeholder="Product title" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                          <input name="sku" value={formData.sku} onChange={handleInputChange} placeholder="SKU" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                          <input name="basePrice" type="number" value={formData.basePrice} onChange={handleInputChange} placeholder="Base price" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                          <input name="stock" type="number" value={formData.stock} onChange={handleInputChange} placeholder="Stock" className="rounded-md border border-slate-300 px-3 py-2 text-sm" />
+                          <select name="category" value={formData.category} onChange={handleInputChange} className="rounded-md border border-slate-300 px-3 py-2 text-sm">
+                            {CATEGORY_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            name="profitMargin"
+                            type="number"
+                            min={MARGIN_MIN}
+                            max={MARGIN_MAX}
+                            value={formData.profitMargin}
+                            onChange={(event) => applyMargin(Number(event.target.value || 0))}
+                            placeholder="Margin %"
+                            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <textarea name="description" value={formData.description} onChange={handleInputChange} placeholder="Description" rows={3} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
                       </div>
-                    ))}
+
+                      <div className="rounded-lg border-2 border-dashed border-slate-300 p-4">
+                        <input type="file" id="images" multiple accept="image/*" onChange={handleImageChange} className="hidden" />
+                        <label htmlFor="images" className="block cursor-pointer text-center text-sm text-slate-600">Upload product images</label>
+                      </div>
+
+                      {formData.images.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                          {formData.images.map((image, index) => (
+                            <div key={`${image.name}-${index}`} className="relative overflow-hidden rounded-md border border-slate-200">
+                              <img src={URL.createObjectURL(image)} alt={`Preview ${index + 1}`} className="h-24 w-full object-cover" />
+                              <button type="button" onClick={() => removeImage(index)} className="absolute right-1 top-1 rounded bg-red-600 px-2 py-1 text-[10px] font-semibold text-white">X</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex justify-between">
+                        <button type="button" onClick={() => setWizardStep(2)} className="rounded-md border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700">Back</button>
+                        <button type="submit" disabled={isLoading} className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                          <Rocket size={14} />
+                          {isLoading ? 'Publishing...' : 'Publish Product'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                {selectedMarginProducts.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <button type="button" onClick={() => setWizardStep(2)} className="rounded-md border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700">Back</button>
+                    <button
+                      type="button"
+                      onClick={saveMarginArrangement}
+                      disabled={isBulkPublishing}
+                      className="inline-flex items-center gap-2 rounded-md bg-slate-800 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {isBulkPublishing ? 'Saving...' : 'Save & Arrange'}
+                      <ChevronRight size={14} />
+                    </button>
                   </div>
                 )}
-
-                <div className="flex justify-between">
-                  <button type="button" onClick={() => setWizardStep(2)} className="rounded-md border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700">Back</button>
-                  <button type="submit" disabled={isLoading} className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                    <Rocket size={14} />
-                    {isLoading ? 'Publishing...' : 'Publish Product'}
-                  </button>
-                </div>
-              </form>
+              </div>
             )}
 
-            {wizardStep === 4 && (
+            {wizardStep === 4 && selectedMarginProducts.length > 0 && (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <h3 className="text-4xl font-semibold text-slate-900">Arrange &amp; Publish</h3>
+                  <p className="mt-1 text-sm text-slate-500">Drag to reorder. Toggle which products are visible in your store.</p>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs text-amber-700">
+                  <p className="inline-flex items-center gap-2 font-medium">
+                    <Info size={14} />
+                    Drag rows to reorder. Toggle individual visibility, or use Publish All to enable every product at once.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={selectAllVisibleProducts}
+                    className="rounded-full border border-[#173b62] bg-white px-3 py-1.5 text-xs font-semibold text-[#173b62]"
+                  >
+                    Select All
+                  </button>
+                </div>
+
+                <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                  {arrangedProducts.map((product, index) => {
+                    const isVisible = visibleProducts.has(product.externalId);
+                    const margin = getProductMargin(product.externalId);
+                    const buyerPrice = Number((product.basePrice * (1 + margin / 100)).toFixed(2));
+                    return (
+                      <div key={product.externalId} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <GripVertical size={15} className="text-slate-300" />
+                          <span className="w-4 text-xs font-semibold text-slate-400">{index + 1}</span>
+                          <img src={product.thumbnail} alt={product.title} className="h-10 w-10 rounded-md object-cover" />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-800">{product.title}</p>
+                            <p className="text-xs font-semibold text-slate-500">
+                              ${buyerPrice.toFixed(2)}
+                              <span className="ml-2 text-slate-400">{margin.toFixed(1)}% margin</span>
+                              <span className="ml-2 text-amber-500">★ {product.rating.toFixed(1)}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleProductVisibility(product.externalId)}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            isVisible
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {isVisible ? <Eye size={12} /> : <EyeOff size={12} />}
+                          {isVisible ? 'Visible' : 'Hidden'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <button type="button" onClick={() => setWizardStep(3)} className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700">
+                    <ChevronLeft size={14} />
+                    Back
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-slate-500"><span className="font-semibold text-slate-700">{visibleSelectedCount}</span> of {arrangedProducts.length} selected</p>
+                    <button
+                      type="button"
+                      onClick={() => publishProductsByIds(arrangedProducts.map((product) => product.externalId))}
+                      disabled={isBulkPublishing || arrangedProducts.length === 0}
+                      className="rounded-xl bg-[#173b62] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {isBulkPublishing ? 'Publishing...' : 'Publish All'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => publishProductsByIds(Array.from(visibleProducts))}
+                      disabled={isBulkPublishing || visibleSelectedCount === 0}
+                      className="rounded-xl bg-[#d4b56a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {isBulkPublishing ? 'Publishing...' : 'Publish Selected'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {wizardStep === 4 && selectedMarginProducts.length === 0 && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-6 text-center">
                 <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-600 text-white">
                   <Check size={18} />

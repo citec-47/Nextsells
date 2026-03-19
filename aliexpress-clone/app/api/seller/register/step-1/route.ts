@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import bcryptjs from 'bcryptjs';
 import { validatePasswordStrength } from '@/lib/auth/password';
@@ -52,11 +52,11 @@ export async function POST(request: NextRequest) {
     const userId = randomUUID();
     const sellerProfileId = randomUUID();
 
-    // Create user
+    // Create user with hashed password
     await query(
-      `INSERT INTO users (id, email, name, role, created_at, updated_at) 
-       VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      [userId, email, name, 'SELLER']
+      `INSERT INTO users (id, email, password, name, role, created_at, updated_at) 
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [userId, email, hashedPassword, name, 'SELLER']
     );
 
     // Create seller profile with IN_PROGRESS status
@@ -73,22 +73,37 @@ export async function POST(request: NextRequest) {
       role: 'SELLER',
     });
 
-    return successResponse(
+    // Build response and set HttpOnly cookie so server-side requireAuth() works after redirect
+    const res = NextResponse.json(
       {
-        message: 'Step 1 complete. Please proceed to logo upload.',
-        user: {
-          id: userId,
-          email: email,
-          name: name,
-          role: 'SELLER',
+        success: true,
+        message: 'Registration successful',
+        data: {
+          message: 'Step 1 complete. Please proceed to logo upload.',
+          user: {
+            id: userId,
+            email: email,
+            name: name,
+            role: 'SELLER',
+          },
+          sellerProfileId: sellerProfileId,
+          token: token,
+          currentStep: 1,
+          nextStep: 2,
         },
-        sellerProfileId: sellerProfileId,
-        token: token,
-        currentStep: 1,
-        nextStep: 2,
       },
-      'Registration successful'
+      { status: 200 }
     );
+
+    res.cookies.set('nextsells_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+    });
+
+    return res;
   } catch (error) {
     console.error('Registration error:', error);
     return errorResponse(

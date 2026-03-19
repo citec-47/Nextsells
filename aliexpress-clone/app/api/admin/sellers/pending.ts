@@ -11,6 +11,8 @@ const prisma = new PrismaClient();
  * GET /api/admin/sellers/pending
  * Get all pending seller approval requests
  */
+type PendingApprovalRequest = Awaited<ReturnType<typeof prisma.approvalRequest.findMany>>[number];
+
 export async function GET(request: NextRequest) {
   try {
     // Verify authentication & admin role
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch documents for each request
     const requestsWithDocs = await Promise.all(
-      requests.map(async (req) => ({
+      requests.map(async (req: PendingApprovalRequest) => ({
         ...req,
         documents: await prisma.sellerDocument.findMany({
           where: { sellerId: req.sellerId },

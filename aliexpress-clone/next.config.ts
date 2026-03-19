@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   // Ensure proper transpilation
@@ -25,7 +29,11 @@ const nextConfig: NextConfig = {
     ],
   },
   // Turbopack configuration for Next.js 16
-  turbopack: {},
+  turbopack: {
+    // Prevent Next from inferring a parent workspace root when multiple lockfiles exist.
+    // Route discovery can become inconsistent when root points outside this app.
+    root: projectRoot,
+  },
 };
 
 export default nextConfig;

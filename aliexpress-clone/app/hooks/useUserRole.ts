@@ -1,16 +1,8 @@
 import { extractRolesFromUser } from '@/lib/auth/roles';
-
-// @ts-ignore
-let useUser: any;
-try {
-  const auth0Client = require('@auth0/nextjs-auth0/client');
-  useUser = auth0Client.useUser;
-} catch (e) {
-  useUser = () => ({ user: null, isLoading: false });
-}
+import { useAuth0User } from '@/lib/auth/auth0Client';
 
 export function useUserRole() {
-  const { user, isLoading } = useUser();
+  const { user, isLoading } = useAuth0User();
   const { roles } = extractRolesFromUser(user);
 
   const hasRole = (role: string | string[]) => {

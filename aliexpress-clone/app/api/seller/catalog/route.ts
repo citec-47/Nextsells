@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
         description: string;
         category: string;
         price: number;
+        discountPercentage?: number;
         stock: number;
         brand?: string;
         rating?: number;
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
       description: product.description,
       category: product.category,
       basePrice: product.price,
+      discountPercentage: product.discountPercentage || 0,
       stock: product.stock,
       brand: product.brand || 'Catalog Supplier',
       rating: product.rating || 0,

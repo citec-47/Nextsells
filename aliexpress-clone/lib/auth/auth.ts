@@ -1,5 +1,5 @@
-// Auth0 Authentication Configuration
-// This file is now using Auth0 via @auth0/nextjs-auth0 package
+// Legacy auth compatibility helpers.
+// Authentication is now managed by `app/api/auth/[...auth0]/route.ts`.
 
 export const auth0Config = {
   secret: process.env.AUTH0_SECRET,
@@ -13,8 +13,5 @@ export const auth0Config = {
   },
 };
 
-// Re-export Auth0 functions
-export { handleAuth, handleLogin, handleLogout, withApiAuthRequired } from '@auth0/nextjs-auth0';
-
-// Note: Authentication is now managed by Auth0 at /api/auth/[auth0]
-// The old NextAuth implementation has been replaced
+// Keep this file import-safe for legacy references.
+// Do not re-export route handlers from here.

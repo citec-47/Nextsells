@@ -6,6 +6,7 @@ import { Heart, ShoppingCart, User, Menu, X, Search, ChevronDown, Store, LogOut 
 import { useShopState } from '../buyer/ShopStateProvider';
 import { useAuth0User } from '@/lib/auth/auth0Client';
 import TopPromoBanner from './TopPromoBanner';
+import { usePlatformBrand } from '@/app/hooks/usePlatformBrand';
 
 interface HeaderProps {
   onSearch?: (query: string) => void;
@@ -21,6 +22,12 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
   const categoryMenuRef = useRef<HTMLDivElement>(null);
   const { cartCount, wishlistCount } = useShopState();
   const { user, isAuthenticated, isLoading } = useAuth0User();
+  const { platformName } = usePlatformBrand();
+  const userRoles = user?.roles || user?.app_metadata?.roles || (user?.role ? [user.role] : []);
+  const isAdmin = userRoles.some((role) => role?.toLowerCase() === 'admin');
+  const primaryAccountHref = isAdmin ? '/admin/dashboard' : '/profile';
+  const primaryAccountLabel = isAdmin ? 'Admin Panel' : 'My Profile';
+  const userRoleLabel = isAdmin ? 'ADMIN' : userRoles[0]?.toUpperCase() || null;
 
   const categoryOptions = [
     'All Categories',
@@ -71,7 +78,7 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
                 <Store size={24} className="text-white" />
               </div>
               <h1 className="text-xl lg:text-2xl font-bold text-gray-800 hidden sm:block">
-                Market<span className="text-orange-500">Hub</span>
+                {platformName}
               </h1>
             </Link>
 
@@ -212,72 +219,83 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
                               <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                              {userRoleLabel && (
+                                <span className="mt-2 inline-flex rounded-full bg-gray-100 px-2 py-1 text-[10px] font-semibold tracking-wide text-gray-600">
+                                  {userRoleLabel}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
                         <div className="py-2">
                           <Link
-                            href="/profile"
+                            href={primaryAccountHref}
                             className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors font-medium"
                             onClick={() => setShowAccountMenu(false)}
                           >
-                            My Profile
+                            {primaryAccountLabel}
                           </Link>
-                          <Link
-                            href="/buyer/orders"
-                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
-                            onClick={() => setShowAccountMenu(false)}
-                          >
-                            My Orders
-                          </Link>
-                          <Link
-                            href="/buyer/wishlist"
-                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
-                            onClick={() => setShowAccountMenu(false)}
-                          >
-                            My Wishlist
-                          </Link>
+                          {!isAdmin && (
+                            <>
+                              <Link
+                                href="/buyer/orders"
+                                className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                                onClick={() => setShowAccountMenu(false)}
+                              >
+                                My Orders
+                              </Link>
+                              <Link
+                                href="/buyer/wishlist"
+                                className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
+                                onClick={() => setShowAccountMenu(false)}
+                              >
+                                My Wishlist
+                              </Link>
+                            </>
+                          )}
                         </div>
                         <div className="border-t border-gray-100 py-2">
+                          {!isAdmin && (
+                            <Link
+                              href="/seller/dashboard"
+                              className="block px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors font-medium"
+                              onClick={() => setShowAccountMenu(false)}
+                            >
+                              Seller Dashboard
+                            </Link>
+                          )}
                           <Link
-                            href="/seller/dashboard"
-                            className="block px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors font-medium"
-                            onClick={() => setShowAccountMenu(false)}
-                          >
-                            Seller Dashboard
-                          </Link>
-                          <a
-                            href="/api/auth/logout"
+                            href="/auth/logout"
                             className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
                             onClick={() => setShowAccountMenu(false)}
                           >
                             <LogOut size={16} />
                             Sign Out
-                          </a>
+                          </Link>
                         </div>
                       </>
                     ) : (
                       <>
                         {/* Not Authenticated View */}
                         <div className="px-4 py-3 border-b border-gray-100">
-                          <p className="text-xs text-gray-500">Welcome to MarketHub</p>
+                          <p className="text-xs text-gray-500">Welcome to {platformName}</p>
                           <p className="text-sm font-semibold text-gray-800 mt-1">Sign in to your account</p>
                         </div>
                         <div className="py-2">
-                          <a
-                            href="/api/auth/login"
+                          <Link
+                            href="/auth/login"
                             className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors font-medium"
                             onClick={() => setShowAccountMenu(false)}
                           >
                             Sign In
-                          </a>
-                          <a
-                            href="/api/auth/login?screen_hint=signup"
+                          </Link>
+                          <Link
+                            href="/auth/accounts"
                             className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 transition-colors"
                             onClick={() => setShowAccountMenu(false)}
                           >
                             Create Account
-                          </a>
+                          </Link>
                         </div>
                         <div className="border-t border-gray-100 py-2">
                           <Link
@@ -323,7 +341,7 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
             {isAuthenticated && user ? (
               <>
                 <Link
-                  href="/profile"
+                  href={primaryAccountHref}
                   className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
@@ -334,55 +352,59 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
                       className="w-5 h-5 rounded-full object-cover"
                     />
                   )}
-                  <span className="line-clamp-1">{user.name || 'Profile'}</span>
+                  <span className="line-clamp-1">{isAdmin ? 'Admin Panel' : (user.name || 'Profile')}</span>
                 </Link>
+                {!isAdmin && (
+                  <>
+                    <Link
+                      href="/buyer/orders"
+                      className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      📦 My Orders
+                    </Link>
+                    <Link
+                      href="/buyer/wishlist"
+                      className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      ❤️ My Wishlist
+                    </Link>
+                    <Link
+                      href="/seller/dashboard"
+                      className="py-3 px-4 hover:bg-orange-50 rounded-lg text-sm font-medium text-orange-600 flex items-center gap-2"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      💼 Seller Dashboard
+                    </Link>
+                  </>
+                )}
                 <Link
-                  href="/buyer/orders"
-                  className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  📦 My Orders
-                </Link>
-                <Link
-                  href="/buyer/wishlist"
-                  className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  ❤️ My Wishlist
-                </Link>
-                <Link
-                  href="/seller/dashboard"
-                  className="py-3 px-4 hover:bg-orange-50 rounded-lg text-sm font-medium text-orange-600 flex items-center gap-2"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  💼 Seller Dashboard
-                </Link>
-                <a
-                  href="/api/auth/logout"
+                  href="/auth/logout"
                   className="py-3 px-4 hover:bg-red-50 rounded-lg text-sm font-medium text-red-600 flex items-center gap-2"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <LogOut size={16} />
                   Sign Out
-                </a>
+                </Link>
               </>
             ) : (
               <>
-                <a
-                  href="/api/auth/login"
+                <Link
+                  href="/auth/login"
                   className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   <User size={18} />
                   Sign In
-                </a>
-                <a
-                  href="/api/auth/login?screen_hint=signup"
+                </Link>
+                <Link
+                  href="/auth/accounts"
                   className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-blue-600 flex items-center gap-2"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Create Account
-                </a>
+                </Link>
                 <Link
                   href="/seller/onboarding"
                   className="py-3 px-4 hover:bg-orange-50 rounded-lg text-sm font-medium text-orange-600"

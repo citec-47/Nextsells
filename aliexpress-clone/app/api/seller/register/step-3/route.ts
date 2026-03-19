@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'crypto';
 import { extractToken, verifyToken } from '@/lib/auth/jwt';
-import { uploadImage } from '@/lib/cloudinary';
 import { errorResponse, successResponse } from '@/lib/utils/api';
 import { query } from '@/lib/db';
 
@@ -33,24 +32,12 @@ export async function POST(request: NextRequest) {
       return errorResponse('Seller profile not found', 404);
     }
 
-    if (sellerProfile.onboarding_status !== 'IN_PROGRESS') {
-      return errorResponse(
-        'Seller onboarding is not in progress',
-        400,
-        'Invalid status'
-      );
-    }
+    // Parse JSON body (document already uploaded via /api/upload/documents)
+    const body = await request.json();
+    const { documentType, documentNumber, expiryDate, documentUrl, documentPublicId } = body;
 
-    // Parse form data
-    const formData = await request.formData();
-    const documentFile = formData.get('document') as File | null;
-    const documentType = formData.get('documentType') as string;
-    const documentNumber = formData.get('documentNumber') as string;
-    const expiryDate = formData.get('expiryDate') as string;
-
-    // Validate document upload
-    if (!documentFile) {
-      return errorResponse('Document file is required', 400);
+    if (!documentUrl) {
+      return errorResponse('Document upload is required', 400);
     }
 
     if (!documentType || !['PASSPORT', 'NATIONAL_ID', 'BUSINESS_LICENSE', 'TAX_ID'].includes(documentType)) {
@@ -62,42 +49,6 @@ export async function POST(request: NextRequest) {
 
     if (!documentNumber || documentNumber.trim().length === 0) {
       return errorResponse('Document number is required', 400);
-    }
-
-    if (documentFile.size > 5 * 1024 * 1024) {
-      return errorResponse('Document file size exceeds 5MB limit', 400);
-    }
-
-    // Validate file type (images and PDFs only)
-    const allowedTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-      'application/pdf',
-    ];
-    if (!allowedTypes.includes(documentFile.type)) {
-      return errorResponse(
-        'Invalid file type. Only images (JPG, PNG, WebP) and PDFs are allowed',
-        400
-      );
-    }
-
-    // Convert file to buffer
-    const bytes = await documentFile.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
-    // Upload document to Cloudinary
-    let documentUrl = '';
-    try {
-      const result = await uploadImage(
-        buffer,
-        `document-${payload.userId}-${Date.now()}`,
-        'documents'
-      );
-      documentUrl = result.url;
-    } catch (err) {
-      console.error('Document upload error:', err);
-      return errorResponse('Failed to upload document', 500);
     }
 
     // Update seller profile to PENDING_REVIEW
@@ -114,13 +65,18 @@ export async function POST(request: NextRequest) {
       [docId, sellerProfile.id, documentType, documentUrl, 'PENDING']
     );
 
-    // Create approval request
-    const reqId = randomUUID();
-    await query(
-      `INSERT INTO approval_requests (id, seller_id, status, submitted_at) 
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
-      [reqId, sellerProfile.id, 'PENDING']
+    // Create approval request (skip if one already exists for this seller)
+    const existingReq = await query(
+      'SELECT id FROM approval_requests WHERE seller_id = $1',
+      [sellerProfile.id]
     );
+    if (existingReq.rows.length === 0) {
+      const reqId = randomUUID();
+      await query(
+        `INSERT INTO approval_requests (id, seller_id, status) VALUES ($1, $2, $3)`,
+        [reqId, sellerProfile.id, 'PENDING']
+      );
+    }
 
     // Get admin users to notify
     const adminResult = await query(
@@ -151,3 +107,5 @@ export async function POST(request: NextRequest) {
     return errorResponse('Failed to process document upload', 500);
   }
 }
+
+

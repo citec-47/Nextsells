@@ -97,7 +97,7 @@ export default function ImageUpload({
             disabled={isUploading}
             className="hidden"
             id={`upload-${uploadType}`}
-            accept={uploadType === 'documents' ? '.pdf' : 'image/*'}
+            accept="image/*"
           />
 
           <label
@@ -112,9 +112,7 @@ export default function ImageUpload({
                   : 'Drag and drop or click to upload'}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {uploadType === 'documents'
-                  ? 'PDF files (max 5MB)'
-                  : 'PNG, JPG, WebP, GIF (max 5MB)'}
+                JPG, PNG, GIF, WebP (max 5MB)
               </p>
             </div>
           </label>
@@ -124,6 +122,7 @@ export default function ImageUpload({
       {isUploading && (
         <div className="mt-2 bg-gray-200 rounded-full h-2">
           {/* CSS variable for dynamic width - inline style required */}
+          {/* eslint-disable-next-line @next/next/no-inline-styles */}
           <div
             className="bg-blue-500 h-2 rounded-full transition-all duration-300 progress-bar-fill"
             style={

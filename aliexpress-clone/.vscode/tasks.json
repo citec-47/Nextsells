@@ -1,0 +1,62 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "dev-server",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "next-dev-local",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"next",
+				"dev",
+				"-p",
+				"3000"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "next-dev-local",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "dev-server-safe",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"$env:NODE_OPTIONS='--max-old-space-size=4096'; npm run dev"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "prisma-generate-once",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"prisma",
+				"generate"
+			],
+			"isBackground": false
+		}
+	]
+}

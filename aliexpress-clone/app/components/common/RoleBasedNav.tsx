@@ -2,19 +2,21 @@
 
 import { useUserRole } from '@/app/hooks/useUserRole';
 import { useAuth0User } from '@/lib/auth/auth0Client';
+import { usePlatformBrand } from '@/app/hooks/usePlatformBrand';
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 
 export default function RoleBasedNav() {
   const { isSeller, isAdmin, isBuyer } = useUserRole();
   const { user, isAuthenticated, isLoading } = useAuth0User();
+  const { platformName } = usePlatformBrand();
 
   return (
     <nav className="bg-white shadow-sm">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center py-4">
           <Link href="/" className="text-xl font-bold text-blue-600">
-            Nextsells
+            {platformName}
           </Link>
 
           <div className="flex gap-6 items-center">
@@ -78,28 +80,28 @@ export default function RoleBasedNav() {
                   <Link href="/profile" className="text-gray-600 hover:text-blue-600 text-sm">
                     Profile
                   </Link>
-                  <a
-                    href="/api/auth/logout"
+                  <Link
+                    href="/auth/logout"
                     className="text-red-600 hover:text-red-700 flex items-center gap-1"
                   >
                     <LogOut size={16} />
                     <span className="text-sm">Logout</span>
-                  </a>
+                  </Link>
                 </>
               ) : (
                 <>
-                  <a
-                    href="/api/auth/login"
+                  <Link
+                    href="/auth/login"
                     className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
                   >
                     Sign In
-                  </a>
-                  <a
-                    href="/api/auth/login?screen_hint=signup"
+                  </Link>
+                  <Link
+                    href="/auth/accounts"
                     className="text-green-600 hover:text-green-700 font-semibold text-sm"
                   >
                     Sign Up
-                  </a>
+                  </Link>
                 </>
               )}
             </div>

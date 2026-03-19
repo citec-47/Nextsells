@@ -22,10 +22,12 @@ export function useImageUpload() {
     // Validate file type
     const validImageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     const validDocTypes = ['application/pdf'];
-    const allowedTypes = uploadType === 'documents' ? validDocTypes : validImageTypes;
+    const allowedTypes = uploadType === 'documents' 
+      ? [...validImageTypes, ...validDocTypes]
+      : validImageTypes;
 
     if (!allowedTypes.includes(file.type)) {
-      toast.error(`Invalid file type. Allowed: ${allowedTypes.join(', ')}`);
+      toast.error(`Invalid file type. Allowed images: JPG, PNG, GIF, WebP${uploadType === 'documents' ? ', PDF' : ''}`);
       return null;
     }
 
@@ -56,13 +58,36 @@ export function useImageUpload() {
       // Return a promise
       return new Promise((resolve, reject) => {
         xhr.addEventListener('load', () => {
-          if (xhr.status === 200) {
-            const response = JSON.parse(xhr.responseText);
+          const contentType = xhr.getResponseHeader('content-type') || '';
+          const raw = xhr.responseText || '';
+
+          if (!contentType.includes('application/json')) {
+            const error = new Error(
+              xhr.status === 401 || xhr.status === 403
+                ? 'Upload failed because your session expired.'
+                : 'Upload service returned an invalid response.'
+            );
+            toast.error(error.message);
+            reject(error);
+            return;
+          }
+
+          let parsed: { url?: string; publicId?: string; error?: string };
+          try {
+            parsed = JSON.parse(raw) as { url?: string; publicId?: string; error?: string };
+          } catch {
+            const error = new Error('Failed to parse upload response.');
+            toast.error(error.message);
+            reject(error);
+            return;
+          }
+
+          if (xhr.status === 200 && parsed.url && parsed.publicId) {
             toast.success('Image uploaded successfully');
-            resolve(response);
+            resolve({ url: parsed.url, publicId: parsed.publicId });
           } else {
-            const error = JSON.parse(xhr.responseText);
-            toast.error(error.error || 'Upload failed');
+            const error = new Error(parsed.error || 'Upload failed');
+            toast.error(error.message);
             reject(error);
           }
         });

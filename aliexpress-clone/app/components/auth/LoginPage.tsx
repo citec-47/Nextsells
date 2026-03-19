@@ -2,14 +2,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Store, ShieldCheck, Truck, Sparkles, Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { persistLocalAuthSession } from '@/lib/auth/auth0Client';
+import { usePlatformBrand } from '@/app/hooks/usePlatformBrand';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const { platformName } = usePlatformBrand();
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -17,12 +23,37 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const params = new URLSearchParams();
-      if (email.trim()) {
-        params.set('login_hint', email.trim());
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setErrorMessage(data.error || data.message || 'Login failed. Please try again.');
+        return;
       }
-      params.set('returnTo', '/');
-      window.location.href = `/api/auth0/login?${params.toString()}`;
+
+      persistLocalAuthSession(data.data.token, data.data.user);
+
+      const returnTo = searchParams.get('returnTo');
+      const role = String(data.data.user.role || '').toUpperCase();
+      const defaultDestination =
+        role === 'ADMIN'
+          ? '/admin/dashboard'
+          : role === 'SELLER'
+            ? '/seller/dashboard'
+            : '/buyer/products';
+
+      router.push(returnTo || defaultDestination);
+      router.refresh();
     } catch (error) {
       setErrorMessage('Login failed. Please try again.');
     } finally {
@@ -43,7 +74,7 @@ export default function LoginPage() {
                 <Store className="h-6 w-6 text-amber-400" />
               </div>
               <span className="text-2xl font-bold">
-                Market<span className="text-amber-400">Hub</span>
+                {platformName}
               </span>
             </Link>
 
@@ -93,7 +124,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <p className="text-xs text-slate-400">© 2026 MarketHub. All rights reserved.</p>
+            <p className="text-xs text-slate-400">© 2026 {platformName}. All rights reserved.</p>
           </div>
         </div>
 
@@ -114,7 +145,7 @@ export default function LoginPage() {
 
             <div className="mt-6">
               <p className="text-base font-semibold text-gray-900">Welcome back</p>
-              <p className="text-sm text-gray-500">Sign in to your MarketHub account</p>
+              <p className="text-sm text-gray-500">Sign in to your {platformName} account</p>
             </div>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">

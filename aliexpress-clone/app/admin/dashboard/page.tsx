@@ -1,13 +1,13 @@
 import { requireRole } from '@/lib/auth/protectedRoutes';
-import AdminApprovalDashboard from '@/app/components/admin/ApprovalDashboard';
+import AdminDashboard from '@/app/components/admin/AdminDashboard';
 
 export const metadata = {
-  title: 'Admin Dashboard - Seller Approvals',
-  description: 'Review and approve seller applications',
+  title: 'Admin Dashboard - Nextsells',
+  description: 'Admin panel for managing the Nextsells platform',
 };
 
 export default async function AdminDashboardPage() {
   await requireRole(['admin']);
-  
-  return <AdminApprovalDashboard />;
+
+  return <AdminDashboard />;
 }

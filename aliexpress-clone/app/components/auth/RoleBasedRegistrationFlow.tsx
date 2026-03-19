@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { ChevronRight, ChevronLeft, Check, AlertCircle } from 'lucide-react';
 import ImageUpload from '@/app/components/common/ImageUpload';
+import { persistLocalAuthSession } from '@/lib/auth/auth0Client';
 
 type UserRole = 'BUYER' | 'SELLER' | null;
 
@@ -14,10 +15,6 @@ interface RegistrationFormData {
   confirmPassword: string;
   name: string;
   phone: string;
-  companyName?: string;
-  businessType?: string;
-  website?: string;
-  bio?: string;
   logo?: string;
   logoPublicId?: string;
 }
@@ -67,9 +64,7 @@ export default function RoleBasedRegistrationFlow() {
     }
   }, [roleParam, router]);
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -82,11 +77,6 @@ export default function RoleBasedRegistrationFlow() {
     // Validation
     if (formData.password !== formData.confirmPassword) {
       setErrorMessage('Passwords do not match');
-      return;
-    }
-
-    if (role === 'SELLER' && !formData.companyName?.trim()) {
-      setErrorMessage('Company name is required for sellers');
       return;
     }
 
@@ -116,6 +106,8 @@ export default function RoleBasedRegistrationFlow() {
       const data = await response.json();
 
       if (data.success) {
+        persistLocalAuthSession(data.data.token, data.data.user);
+
         if (role === 'BUYER') {
           // Buyers skip to success
           setToken(data.data.token);
@@ -128,6 +120,7 @@ export default function RoleBasedRegistrationFlow() {
           
           // Upload logo via step-2
           await uploadSellerLogo(data.data.token);
+          setErrorMessage(''); // clear any stale error before entering step 2
           setStep(2); // Go to ID verification
           toast.success('Basic info submitted! Now please upload your government ID.');
         }
@@ -162,10 +155,7 @@ export default function RoleBasedRegistrationFlow() {
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          companyName: formData.companyName,
-          businessType: formData.businessType || 'Not Specified',
-          website: formData.website || '',
-          bio: formData.bio || '',
+          companyName: formData.name.trim(),
           logoUrl: formData.logo,
           logoPublicId: formData.logoPublicId,
         }),
@@ -223,10 +213,11 @@ export default function RoleBasedRegistrationFlow() {
       const data = await response.json();
 
       if (data.success) {
+        setErrorMessage('');
         setStep(3);
         toast.success('Document uploaded! Your account will be verified shortly.');
       } else {
-        setErrorMessage(data.message || 'Failed to upload document');
+        setErrorMessage(data.error || data.message || 'Failed to upload document');
       }
     } catch (error) {
       setErrorMessage('An error occurred. Please try again.');
@@ -237,6 +228,7 @@ export default function RoleBasedRegistrationFlow() {
   };
 
   const handleGoBack = () => {
+    setErrorMessage('');
     if (step === 1) {
       router.push('/auth/accounts');
     } else if (step === 2) {
@@ -244,7 +236,7 @@ export default function RoleBasedRegistrationFlow() {
     }
   };
 
-  const progressPercentage = step === 1 ? 33 : step === 2 ? 66 : 100;
+  const progressWidthClass = step === 1 ? 'w-1/3' : step === 2 ? 'w-2/3' : 'w-full';
 
   if (!role) {
     return (
@@ -292,12 +284,7 @@ export default function RoleBasedRegistrationFlow() {
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             {/* CSS variable for dynamic width - inline style required */}
-            <div
-              className="bg-indigo-600 h-2 rounded-full transition-all duration-500 progress-bar-fill"
-              style={
-                { '--progress-width': `${progressPercentage}%` } as React.CSSProperties
-              }
-            />
+            <div className={`bg-indigo-600 h-2 rounded-full transition-all duration-500 ${progressWidthClass}`} />
           </div>
         </div>
 
@@ -314,7 +301,7 @@ export default function RoleBasedRegistrationFlow() {
           {step === 1 && (
             <form onSubmit={handleStep1Submit} className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                Step 1: {role === 'BUYER' ? 'Basic Information' : 'Account & Business Details'}
+                Step 1: {role === 'BUYER' ? 'Basic Information' : 'Account Details'}
               </h2>
 
               <div>
@@ -402,101 +389,27 @@ export default function RoleBasedRegistrationFlow() {
 
               {/* Seller-Specific Fields */}
               {role === 'SELLER' && (
-                <>
-                  <div className="border-t border-gray-200 pt-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      Business Information
-                    </h3>
-
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Company Name *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        name="companyName"
-                        value={formData.companyName || ''}
-                        onChange={handleInputChange}
-                        placeholder="Your Business Name"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Business Type
-                        </label>
-                        <select
-                          name="businessType"
-                          value={formData.businessType || 'Sole Proprietor'}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          title="Select business type"
-                          aria-label="Business type"
-                        >
-                          <option value="Sole Proprietor">Sole Proprietor</option>
-                          <option value="Partnership">Partnership</option>
-                          <option value="LLC">LLC</option>
-                          <option value="Corporation">Corporation</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Website (Optional)
-                        </label>
-                        <input
-                          type="url"
-                          name="website"
-                          value={formData.website || ''}
-                          onChange={handleInputChange}
-                          placeholder="https://example.com"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Business Bio (Optional)
-                      </label>
-                      <textarea
-                        name="bio"
-                        value={formData.bio || ''}
-                        onChange={handleInputChange}
-                        placeholder="Tell customers about your business..."
-                        rows={3}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Logo Upload */}
-                  <div className="border-t border-gray-200 pt-6">
-                    <ImageUpload
-                      onUploadComplete={(url, publicId) => {
-                        setFormData({
-                          ...formData,
-                          logo: url,
-                          logoPublicId: publicId,
-                        });
-                      }}
-                      uploadType="logos"
-                      label="Company Logo *"
-                      preview={formData.logo}
-                      onRemove={() =>
-                        setFormData({
-                          ...formData,
-                          logo: '',
-                          logoPublicId: '',
-                        })
-                      }
-                    />
-                  </div>
-                </>
+                <div className="border-t border-gray-200 pt-6">
+                  <ImageUpload
+                    onUploadComplete={(url, publicId) => {
+                      setFormData({
+                        ...formData,
+                        logo: url,
+                        logoPublicId: publicId,
+                      });
+                    }}
+                    uploadType="logos"
+                    label="Company Logo *"
+                    preview={formData.logo}
+                    onRemove={() =>
+                      setFormData({
+                        ...formData,
+                        logo: '',
+                        logoPublicId: '',
+                      })
+                    }
+                  />
+                </div>
               )}
 
               {/* Submit Button */}

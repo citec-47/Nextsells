@@ -33,15 +33,22 @@ async function initializeDatabase(client) {
       id VARCHAR(255) PRIMARY KEY,
       auth0_id VARCHAR(255) UNIQUE,
       email VARCHAR(255) UNIQUE NOT NULL,
+      password VARCHAR(255),
       name VARCHAR(255),
       role VARCHAR(50) DEFAULT 'BUYER',
       avatar_url VARCHAR(500),
+      is_verified BOOLEAN DEFAULT FALSE,
       is_blocked BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
   console.log('  ✓ users table created');
+
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255);`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;`);
+  console.log('  ✓ users auth columns ensured');
 
   // Create seller_profiles table
   await client.query(`

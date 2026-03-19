@@ -1,13 +1,18 @@
+'use client';
+
 import Link from 'next/link';
+import { usePlatformBrand } from '@/app/hooks/usePlatformBrand';
 
 export default function Footer() {
+  const { platformName } = usePlatformBrand();
+
   return (
     <footer className="bg-gray-800 text-white py-12 mt-12">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           {/* Brand Section */}
           <div>
-            <h3 className="text-xl font-bold mb-4 text-orange-400">Nextsells</h3>
+            <h3 className="text-xl font-bold mb-4 text-orange-400">{platformName}</h3>
             <p className="text-gray-400 text-sm">
               Your one-stop marketplace for everything you need.
             </p>
@@ -46,7 +51,7 @@ export default function Footer() {
             <ul className="space-y-2 text-sm text-gray-400">
               <li>
                 <Link href="/about" className="hover:text-white transition-colors">
-                  About Nextsells
+                  About {platformName}
                 </Link>
               </li>
               <li>
@@ -69,7 +74,7 @@ export default function Footer() {
 
           {/* Seller Section */}
           <div>
-            <h4 className="font-semibold mb-4">Sell on Nextsells</h4>
+            <h4 className="font-semibold mb-4">Sell on {platformName}</h4>
             <ul className="space-y-2 text-sm text-gray-400">
               <li>
                 <Link href="/seller/onboarding" className="hover:text-white transition-colors">
@@ -97,7 +102,7 @@ export default function Footer() {
 
         {/* Bottom Bar */}
         <div className="border-t border-gray-700 mt-8 pt-8 text-center text-sm text-gray-400">
-          <p>&copy; 2026 Nextsells. All rights reserved.</p>
+          <p>&copy; 2026 {platformName}. All rights reserved.</p>
         </div>
       </div>
     </footer>
