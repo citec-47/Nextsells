@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { clearLocalAuthSession } from '@/lib/auth/auth0Client';
 
-export default function LogoutPage() {
+function LogoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -25,5 +26,13 @@ export default function LogoutPage() {
         <p className="text-sm font-medium text-gray-700">Signing you out...</p>
       </div>
     </div>
+  );
+}
+
+export default function LogoutPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-gray-600">Signing you out...</div>}>
+      <LogoutContent />
+    </Suspense>
   );
 }

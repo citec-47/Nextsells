@@ -272,8 +272,11 @@ export async function POST(request: NextRequest) {
     }
 
     const sellerResult = await getApprovedSellerProfile(payload.userId);
-    if (sellerResult.error || !sellerResult.profile) {
+    if (sellerResult.error) {
       return sellerResult.error;
+    }
+    if (!sellerResult.profile) {
+      return errorResponse('Seller profile not found', 404);
     }
 
     const body = await request.json() as {

@@ -1,69 +1,141 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { PrismaClient } from '@prisma/client';
 import { extractToken, verifyToken } from '@/lib/auth/jwt';
 import { query } from '@/lib/db';
+import { errorResponse, successResponse } from '@/lib/utils/api';
 
-// Ensure messages table exists
-async function ensureTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS messages (
-      id           VARCHAR(255) PRIMARY KEY,
-      sender_id    VARCHAR(255) NOT NULL,
-      receiver_id  VARCHAR(255) NOT NULL,
-      content      TEXT NOT NULL,
-      is_read      BOOLEAN  DEFAULT FALSE,
-      created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
+const prisma = new PrismaClient();
+const SYSTEM_CONVERSATION_BOOTSTRAP = '__SYSTEM_CONVERSATION_BOOTSTRAP__';
+
+function isDebugNoiseMessage(content: string | null | undefined) {
+  return /^E2E\s+(seller ping|admin reply)\s+\d+$/i.test(String(content || '').trim());
+}
+
+type AdminMessageRow = {
+  senderId: string;
+  receiverId: string;
+  senderName: string;
+  receiverName: string;
+  senderRole: string;
+  receiverRole: string;
+  content: string;
+  isRead: boolean;
+  createdAt: Date;
+};
+
+async function fetchMessagesFallback(adminUserId: string): Promise<AdminMessageRow[]> {
+  const result = await query(
+    `SELECT
+       COALESCE(to_jsonb(m)->>'sender_id', to_jsonb(m)->>'senderId') AS "senderId",
+       COALESCE(to_jsonb(m)->>'receiver_id', to_jsonb(m)->>'receiverId') AS "receiverId",
+       COALESCE(s.name, 'Unknown') AS "senderName",
+       COALESCE(r.name, 'Unknown') AS "receiverName",
+       COALESCE(s.role, '') AS "senderRole",
+       COALESCE(r.role, '') AS "receiverRole",
+       m.content AS content,
+       COALESCE(to_jsonb(m)->>'is_read', to_jsonb(m)->>'isRead', 'false')::boolean AS "isRead",
+       COALESCE(to_jsonb(m)->>'created_at', to_jsonb(m)->>'createdAt', NOW()::text) AS "createdAt"
+     FROM messages m
+     LEFT JOIN users s ON s.id = COALESCE(to_jsonb(m)->>'sender_id', to_jsonb(m)->>'senderId')
+     LEFT JOIN users r ON r.id = COALESCE(to_jsonb(m)->>'receiver_id', to_jsonb(m)->>'receiverId')
+     WHERE COALESCE(to_jsonb(m)->>'sender_id', to_jsonb(m)->>'senderId') = $1
+        OR COALESCE(to_jsonb(m)->>'receiver_id', to_jsonb(m)->>'receiverId') = $1
+     ORDER BY COALESCE(to_jsonb(m)->>'created_at', to_jsonb(m)->>'createdAt') DESC`,
+    [adminUserId]
+  );
+
+  return (result.rows as Array<Record<string, unknown>>).map((row) => ({
+    senderId: String(row.senderId || ''),
+    receiverId: String(row.receiverId || ''),
+    senderName: String(row.senderName || 'Unknown'),
+    receiverName: String(row.receiverName || 'Unknown'),
+    senderRole: String(row.senderRole || ''),
+    receiverRole: String(row.receiverRole || ''),
+    content: String(row.content || ''),
+    isRead: Boolean(row.isRead),
+    createdAt: new Date(String(row.createdAt || new Date().toISOString())),
+  }));
 }
 
 export async function GET(request: NextRequest) {
-  const token = extractToken(request.headers.get('authorization'));
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const payload = verifyToken(token);
-  if (!payload || payload.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   try {
-    await ensureTable();
+    const token =
+      extractToken(request.headers.get('authorization')) ||
+      request.cookies.get('nextsells_token')?.value ||
+      null;
+    if (!token) {
+      return errorResponse('Unauthorized', 401);
+    }
 
-    // Get all unique conversation pairs with latest message
-    const res = await query(`
-      WITH latest_messages AS (
-        SELECT
-          LEAST(sender_id, receiver_id) AS user1,
-          GREATEST(sender_id, receiver_id) AS user2,
-          content,
-          is_read,
-          created_at,
-          ROW_NUMBER() OVER (
-            PARTITION BY LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id)
-            ORDER BY created_at DESC
-          ) AS rn
-        FROM messages
-      )
-      SELECT
-        user1,
-        user2,
-        content AS "lastMessage",
-        is_read AS "isRead",
-        created_at AS "lastAt",
-        u1.name AS "user1Name",
-        u1.role AS "user1Role",
-        u2.name AS "user2Name",
-        u2.role AS "user2Role"
-      FROM latest_messages lm
-      JOIN users u1 ON lm.user1 = u1.id
-      JOIN users u2 ON lm.user2 = u2.id
-      WHERE rn = 1
-      ORDER BY created_at DESC
-    `);
+    const payload = verifyToken(token);
+    if (!payload || String(payload.role).toUpperCase() !== 'ADMIN') {
+      return errorResponse('Admin access required', 403);
+    }
 
-    return NextResponse.json({ success: true, data: res.rows });
+    let messages: AdminMessageRow[] = [];
+    try {
+      const prismaMessages = await prisma.message.findMany({
+        where: {
+          OR: [{ senderId: payload.userId }, { receiverId: payload.userId }],
+        },
+        include: {
+          sender: { select: { id: true, name: true, role: true } },
+          receiver: { select: { id: true, name: true, role: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      messages = prismaMessages.map((message) => ({
+        senderId: message.senderId,
+        receiverId: message.receiverId,
+        senderName: message.sender.name,
+        receiverName: message.receiver.name,
+        senderRole: message.sender.role,
+        receiverRole: message.receiver.role,
+        content: message.content,
+        isRead: message.isRead,
+        createdAt: message.createdAt,
+      }));
+    } catch {
+      messages = await fetchMessagesFallback(payload.userId);
+    }
+
+    const visibleMessages = messages.filter(
+      (message) =>
+        String(message.content || '').trim() !== SYSTEM_CONVERSATION_BOOTSTRAP
+        && !isDebugNoiseMessage(message.content)
+    );
+
+    const conversations = new Map<string, {
+      otherUserId: string;
+      otherUserName: string;
+      otherUserRole: string;
+      lastMessage: string;
+      isRead: boolean;
+      lastAt: Date;
+    }>();
+
+    for (const message of visibleMessages) {
+      const isSender = message.senderId === payload.userId;
+      const otherUserId = isSender ? message.receiverId : message.senderId;
+      const otherUserName = isSender ? message.receiverName : message.senderName;
+      const otherUserRole = isSender ? message.receiverRole : message.senderRole;
+
+      if (!conversations.has(otherUserId)) {
+        conversations.set(otherUserId, {
+          otherUserId,
+          otherUserName,
+          otherUserRole,
+          lastMessage: message.content,
+          isRead: message.isRead,
+          lastAt: message.createdAt,
+        });
+      }
+    }
+
+    return successResponse({ conversations: Array.from(conversations.values()) });
   } catch (error) {
     console.error('Admin messages error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return errorResponse('Internal server error', 500);
   }
 }

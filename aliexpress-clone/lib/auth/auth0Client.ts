@@ -15,6 +15,7 @@ type LocalSessionUser = {
   id?: string;
   sub?: string;
   email?: string;
+  email_verified?: boolean;
   name?: string;
   picture?: string | null;
   role?: string;

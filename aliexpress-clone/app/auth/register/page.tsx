@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import RoleBasedRegistrationFlow from '@/app/components/auth/RoleBasedRegistrationFlow';
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function RegisterPage() {
-  return <RoleBasedRegistrationFlow />;
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-gray-600">Loading registration...</div>}>
+      <RoleBasedRegistrationFlow />
+    </Suspense>
+  );
 }

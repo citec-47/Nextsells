@@ -6,10 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withApiAuthRequired } from '@auth0/nextjs-auth0';
 import { getAuth0Session } from '@/lib/auth/auth0Server';
 
-export const GET = withApiAuthRequired(async (req: NextRequest) => {
+export async function GET(_req: NextRequest) {
   try {
     // Get the Auth0 session
     const session = await getAuth0Session();
@@ -40,4 +39,4 @@ export const GET = withApiAuthRequired(async (req: NextRequest) => {
       { status: 500 }
     );
   }
-});
+}

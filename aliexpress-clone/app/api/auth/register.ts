@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
         data: {
           userId: user.id,
           companyName: '',
+          businessType: 'Individual',
           businessAddress: '',
           city: '',
           state: '',

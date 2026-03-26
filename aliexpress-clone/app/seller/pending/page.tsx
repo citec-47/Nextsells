@@ -13,7 +13,7 @@ export default async function SellerPendingPage() {
   const user = await getUser();
 
   // If user is already a seller, redirect to dashboard
-  if (user?.roles?.includes('seller')) {
+  if (user?.role?.toLowerCase() === 'seller') {
     redirect('/seller/dashboard');
   }
 

@@ -131,7 +131,10 @@ export default function MyStorePage() {
     const load = async () => {
       try {
         const token = localStorage.getItem('token');
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
 
         const [storeResponse, productsResponse] = await Promise.all([
           fetch('/api/seller/store', { headers }),
@@ -283,6 +286,8 @@ export default function MyStorePage() {
           </div>
           <Link
             href={previewHref}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-2xl border-2 border-[#173b62] bg-white px-5 py-3 text-sm font-semibold text-[#173b62] transition-colors hover:bg-slate-50"
           >
             <ExternalLink size={16} />

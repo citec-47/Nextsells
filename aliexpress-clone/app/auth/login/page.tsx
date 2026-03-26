@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import LoginPage from '@/app/components/auth/LoginPage';
 
 export const metadata = {
@@ -6,5 +7,9 @@ export const metadata = {
 };
 
 export default function Login() {
-  return <LoginPage />;
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-gray-600">Loading login...</div>}>
+      <LoginPage />
+    </Suspense>
+  );
 }

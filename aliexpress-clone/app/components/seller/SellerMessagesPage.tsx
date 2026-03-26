@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 type Conversation = {
   key: string;
@@ -8,6 +8,14 @@ type Conversation = {
   otherUserName: string;
   otherUserRole: string;
   lastMessage: string;
+  lastAt: string;
+};
+
+type Contact = {
+  userId: string;
+  name: string;
+  role: string;
+  hasConversation: boolean;
   lastAt: string;
 };
 
@@ -23,31 +31,62 @@ type ChatMessage = {
 };
 
 export default function SellerMessagesPage() {
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
   const [text, setText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [error, setError] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
     try {
       const token = localStorage.getItem('token');
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/seller/messages', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
+        headers,
       });
       const json = await response.json();
       if (!response.ok || !json.success) {
         throw new Error(json.error || 'Failed to load messages');
       }
 
-      setConversations(json.data.conversations || []);
+      const orderedConversations = ((json.data.conversations || []) as Conversation[]).sort((a, b) => {
+        if (a.otherUserRole === 'ADMIN' && b.otherUserRole !== 'ADMIN') return -1;
+        if (a.otherUserRole !== 'ADMIN' && b.otherUserRole === 'ADMIN') return 1;
+        return new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime();
+      });
+
+      setContacts(json.data.contacts || []);
+      setConversations(orderedConversations);
       setMessages(json.data.messages || []);
       setCurrentUserId(json.data.currentUserId || null);
-      if (!selectedUserId && (json.data.conversations || []).length > 0) {
-        setSelectedUserId(json.data.conversations[0].otherUserId);
+      setError('');
+
+      const contacts = (json.data.contacts || []) as Contact[];
+      const adminContact = contacts.find((contact) => String(contact.role).toUpperCase() === 'ADMIN');
+      const selectedStillExists = selectedUserId
+        ? contacts.some((contact) => contact.userId === selectedUserId)
+        : false;
+
+      if (!selectedStillExists) {
+        if (adminContact) {
+          setSelectedUserId(adminContact.userId);
+        } else if (orderedConversations.length > 0) {
+          setSelectedUserId(orderedConversations[0].otherUserId);
+        } else {
+          setSelectedUserId(null);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages');
@@ -58,6 +97,13 @@ export default function SellerMessagesPage() {
 
   useEffect(() => {
     load();
+    const timer = window.setInterval(() => {
+      load();
+    }, 4000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -72,6 +118,26 @@ export default function SellerMessagesPage() {
     [messages, selectedUserId]
   );
 
+  const filteredContacts = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter((contact) =>
+      contact.name.toLowerCase().includes(q) || contact.role.toLowerCase().includes(q)
+    );
+  }, [contacts, searchText]);
+
+  const selectedContact = useMemo(
+    () => contacts.find((contact) => contact.userId === selectedUserId) || null,
+    [contacts, selectedUserId]
+  );
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [visibleMessages]);
+
+  const formatMessageTime = (value: string) =>
+    new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
   const handleSend = async (event: FormEvent) => {
     event.preventDefault();
     if (!text.trim()) return;
@@ -81,6 +147,7 @@ export default function SellerMessagesPage() {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/seller/messages', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -96,12 +163,86 @@ export default function SellerMessagesPage() {
         throw new Error(json.error || 'Failed to send message');
       }
 
+      const sent = json.data?.message as ChatMessage | undefined;
+      const targetUserId = selectedUserId;
+      if (sent && targetUserId) {
+        setMessages((current) => {
+          const withoutDuplicate = current.filter((item) => item.id !== sent.id);
+          return [...withoutDuplicate, sent];
+        });
+
+        setConversations((current) => {
+          const existing = current.find((item) => item.otherUserId === targetUserId);
+          const fallbackName = selectedContact?.name || 'Admin';
+          const fallbackRole = selectedContact?.role || 'ADMIN';
+          const updated: Conversation = {
+            key: existing?.key || [currentUserId || sent.senderId, targetUserId].sort().join(':'),
+            otherUserId: targetUserId,
+            otherUserName: existing?.otherUserName || fallbackName,
+            otherUserRole: existing?.otherUserRole || fallbackRole,
+            lastMessage: sent.content,
+            lastAt: sent.createdAt,
+          };
+
+          const remaining = current.filter((item) => item.otherUserId !== targetUserId);
+          return [updated, ...remaining];
+        });
+
+        setContacts((current) =>
+          current.map((item) =>
+            item.userId === targetUserId
+              ? {
+                  ...item,
+                  hasConversation: true,
+                  lastAt: sent.createdAt,
+                }
+              : item
+          )
+        );
+      }
+
       setText('');
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleSelectContact = async (contactUserId: string) => {
+    if (!contactUserId || isBootstrapping) {
+      return;
+    }
+
+    setSelectedUserId(contactUserId);
+    setError('');
+    setIsBootstrapping(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/seller/messages', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          receiverId: contactUserId,
+          bootstrapOnly: true,
+        }),
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || 'Failed to open conversation');
+      }
+
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to open conversation');
+    } finally {
+      setIsBootstrapping(false);
     }
   };
 
@@ -117,10 +258,53 @@ export default function SellerMessagesPage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[280px_1fr]">
             <div className="rounded-xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Conversations</div>
-              <div className="max-h-[520px] overflow-y-auto">
+              <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Start Conversation</div>
+              <div className="border-b border-slate-100 p-3">
+                <input
+                  value={searchText}
+                  onChange={(event) => setSearchText(event.target.value)}
+                  placeholder="Search Admin or buyers..."
+                  className="h-9 w-full rounded-lg border border-slate-300 px-3 text-xs outline-none focus:border-slate-500"
+                />
+              </div>
+              <div className="max-h-[250px] overflow-y-auto border-b border-slate-100">
+                {filteredContacts.length === 0 ? (
+                  <p className="p-3 text-xs text-slate-500">
+                    {contacts.length === 0
+                      ? 'Start chatting with Admin'
+                      : 'No contacts found for that search.'}
+                  </p>
+                ) : (
+                  filteredContacts.map((contact) => (
+                    <button
+                      key={contact.userId}
+                      onClick={() => {
+                        void handleSelectContact(contact.userId);
+                      }}
+                      disabled={isBootstrapping}
+                      className={`w-full border-b border-slate-100 px-3 py-2 text-left ${selectedUserId === contact.userId ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-800">{contact.name}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${contact.role === 'ADMIN' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                          {contact.role}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        {contact.hasConversation ? 'Open Chat' : 'Start Chat'}
+                      </p>
+                      <span className="mt-1 inline-flex rounded-md border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-700">
+                        {isBootstrapping ? 'Opening...' : contact.hasConversation ? 'Open Chat' : 'Start Chat'}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-600">Recent Conversations</div>
+              <div className="max-h-[260px] overflow-y-auto">
                 {conversations.length === 0 ? (
-                  <p className="p-3 text-xs text-slate-500">No conversations yet.</p>
+                  <p className="p-3 text-xs text-slate-500">No messages yet. Click Admin above to start chatting instantly.</p>
                 ) : (
                   conversations.map((conv) => (
                     <button
@@ -128,7 +312,12 @@ export default function SellerMessagesPage() {
                       onClick={() => setSelectedUserId(conv.otherUserId)}
                       className={`w-full border-b border-slate-100 px-3 py-2 text-left ${selectedUserId === conv.otherUserId ? 'bg-slate-50' : 'hover:bg-slate-50'}`}
                     >
-                      <p className="text-sm font-semibold text-slate-800">{conv.otherUserName}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-slate-800">{conv.otherUserName}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${conv.otherUserRole === 'ADMIN' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                          {conv.otherUserRole}
+                        </span>
+                      </div>
                       <p className="line-clamp-1 text-xs text-slate-500">{conv.lastMessage}</p>
                     </button>
                   ))
@@ -137,36 +326,49 @@ export default function SellerMessagesPage() {
             </div>
 
             <div className="flex h-[560px] flex-col rounded-xl border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">Chat</div>
+              <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
+                {selectedContact ? `Chat with ${selectedContact.name}` : 'Chat'}
+              </div>
               <div className="flex-1 space-y-2 overflow-y-auto p-3">
                 {visibleMessages.length === 0 ? (
-                  <p className="text-xs text-slate-500">Select a conversation or send your first message.</p>
+                  <p className="text-xs text-slate-500">
+                    {selectedContact
+                      ? `No messages yet with ${selectedContact.name}. Send the first message now.`
+                      : 'Select Admin or a buyer from Start Conversation to begin.'}
+                  </p>
                 ) : (
                   visibleMessages.map((msg) => {
                     const isOwnMessage = currentUserId ? msg.senderId === currentUserId : false;
+                    const senderLabel = isOwnMessage ? 'You' : (msg.senderName || 'Admin');
                     return (
-                    <div
-                      key={msg.id}
-                      className={`max-w-[78%] rounded-lg px-3 py-2 text-sm ${isOwnMessage ? 'ml-auto bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'}`}
-                    >
-                      <p>{msg.content}</p>
-                      <p className={`mt-1 text-[10px] ${isOwnMessage ? 'text-blue-100' : 'text-slate-500'}`}>
-                        {new Date(msg.createdAt).toLocaleTimeString()}
-                      </p>
+                    <div key={msg.id} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                      <div
+                        className={`max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-sm ${isOwnMessage ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800'}`}
+                      >
+                        <p className={`mb-1 text-[10px] font-semibold ${isOwnMessage ? 'text-blue-100' : 'text-slate-500'}`}>
+                          {senderLabel}
+                        </p>
+                        <p>{msg.content}</p>
+                        <p className={`mt-1 text-[10px] ${isOwnMessage ? 'text-blue-100' : 'text-slate-500'}`}>
+                          {formatMessageTime(msg.createdAt)}
+                        </p>
+                      </div>
                     </div>
                   );})
                 )}
+                <div ref={messagesEndRef} />
               </div>
               <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-slate-100 p-3">
                 <input
                   value={text}
                   onChange={(event) => setText(event.target.value)}
-                  placeholder="Type your message..."
+                  placeholder={selectedUserId ? 'Type your message...' : 'Select a contact to start messaging'}
+                  disabled={!selectedUserId}
                   className="h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-500"
                 />
                 <button
                   type="submit"
-                  disabled={isSending || !text.trim()}
+                  disabled={isSending || !text.trim() || !selectedUserId}
                   className="h-10 rounded-lg bg-[#173b62] px-4 text-xs font-semibold text-white hover:bg-[#12304f] disabled:opacity-60"
                 >
                   {isSending ? 'Sending...' : 'Send'}

@@ -34,16 +34,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Hash password
-    const hashedPassword = await bcryptjs.hash(password, 10);
-
     // Create user
     const userId = uuidv4();
     const user = await db.createUser({
       id: userId,
       email,
       name,
-      password: hashedPassword,
       role: 'BUYER',
     });
 

@@ -38,7 +38,10 @@ async function getApprovedSellerProfile(userId: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = extractToken(request.headers.get('authorization'));
+    const token =
+      extractToken(request.headers.get('authorization')) ||
+      request.cookies.get('nextsells_token')?.value ||
+      null;
     if (!token) {
       return errorResponse('Unauthorized', 401);
     }
@@ -75,6 +78,32 @@ export async function POST(request: NextRequest) {
     const imageFiles = formData.getAll('images') as File[];
     const imageUrls = imageFiles.map((file) => `/uploads/products/${file.name}`);
 
+    if (sku) {
+      const existingSku = await prisma.product.findFirst({
+        where: {
+          sellerId: sellerResult.profile.id,
+          sku,
+        },
+        select: { id: true },
+      });
+
+      if (existingSku) {
+        return errorResponse('A product with this SKU already exists', 409);
+      }
+    }
+
+    const existingTitle = await prisma.product.findFirst({
+      where: {
+        sellerId: sellerResult.profile.id,
+        title,
+      },
+      select: { id: true },
+    });
+
+    if (existingTitle) {
+      return errorResponse('A product with this title already exists', 409);
+    }
+
     const product = await prisma.product.create({
       data: {
         title,
@@ -85,7 +114,7 @@ export async function POST(request: NextRequest) {
         profitMargin,
         stock,
         sku,
-        images: (imageUrls.length > 0 ? imageUrls : ['/placeholder.jpg']) as any,
+        images: JSON.stringify(imageUrls.length > 0 ? imageUrls : ['/placeholder.jpg']),
         isPublished: true,
         sellerId: sellerResult.profile.id,
       },
@@ -122,7 +151,10 @@ async function getSellerProfile(userId: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    const token = extractToken(request.headers.get('authorization'));
+    const token =
+      extractToken(request.headers.get('authorization')) ||
+      request.cookies.get('nextsells_token')?.value ||
+      null;
     if (!token) {
       return errorResponse('Unauthorized', 401);
     }

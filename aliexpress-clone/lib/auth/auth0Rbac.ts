@@ -5,8 +5,8 @@
  * Helper functions for implementing role-based access control
  */
 
-import { getSession } from '@auth0/nextjs-auth0';
 import { NextRequest, NextResponse } from 'next/server';
+import { auth0 } from '@/lib/auth0';
 import type { Auth0User } from './auth0Types';
 
 /**
@@ -16,7 +16,7 @@ import type { Auth0User } from './auth0Types';
  * and added as custom claim 'https://aliexpress-clone/roles'
  */
 export async function getUserRoles(): Promise<string[]> {
-  const session = await getSession();
+  const session = await auth0.getSession();
   
   if (!session) {
     return [];
@@ -61,7 +61,7 @@ export async function hasAllRoles(requiredRoles: string[]): Promise<boolean> {
 export function requireRole(role: string | string[]) {
   return (handler: (req: NextRequest) => Promise<Response>) => {
     return async (req: NextRequest): Promise<Response> => {
-      const session = await getSession();
+      const session = await auth0.getSession();
       
       if (!session) {
         return NextResponse.json(
@@ -142,7 +142,7 @@ export async function isAdmin(): Promise<boolean> {
  * Get user permissions (if configured in Auth0)
  */
 export async function getUserPermissions(): Promise<string[]> {
-  const session = await getSession();
+  const session = await auth0.getSession();
   
   if (!session) {
     return [];
@@ -168,7 +168,7 @@ export async function hasPermission(permission: string): Promise<boolean> {
 export function requirePermission(permission: string | string[]) {
   return (handler: (req: NextRequest) => Promise<Response>) => {
     return async (req: NextRequest): Promise<Response> => {
-      const session = await getSession();
+      const session = await auth0.getSession();
       
       if (!session) {
         return NextResponse.json(

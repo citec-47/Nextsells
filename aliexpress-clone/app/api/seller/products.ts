@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         profitMargin,
         stock,
         sku: sku || undefined,
-        images: imageUrls,
+        images: JSON.stringify(imageUrls),
         isPublished: true,
         sellerId: sellerProfile.id,
       },

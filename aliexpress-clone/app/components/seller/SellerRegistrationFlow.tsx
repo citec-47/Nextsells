@@ -104,6 +104,11 @@ export default function SellerRegistrationFlow() {
 
   // Step 3 data (Location)
   const [step3Data, setStep3Data] = useState<Step3Data>({
+    documentType: '',
+    documentNumber: '',
+    expiryDate: '',
+    documentUrl: '',
+    documentPublicId: '',
     country: '',
     streetAddress: '',
     city: '',

@@ -5,7 +5,7 @@
  * Provides type definitions for Auth0 integration
  */
 
-import { Session } from '@auth0/nextjs-auth0';
+import type { SessionData } from '@auth0/nextjs-auth0/types';
 
 /**
  * Extended Auth0 User with custom claims
@@ -29,7 +29,7 @@ export interface Auth0User {
 /**
  * Auth0 Session Type
  */
-export interface Auth0Session extends Session {
+export interface Auth0Session extends SessionData {
   user: Auth0User;
 }
 

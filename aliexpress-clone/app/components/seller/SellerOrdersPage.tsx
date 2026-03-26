@@ -22,6 +22,7 @@ type SellerOrder = {
 export default function SellerOrdersPage() {
   const [orders, setOrders] = useState<SellerOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
 
@@ -138,6 +139,53 @@ export default function SellerOrdersPage() {
     return 'bg-slate-100 text-slate-700';
   };
 
+  const editableStatus = (status: string) => {
+    const normalized = normalizeStatus(status);
+    if (normalized === 'pending-to-pay' || normalized === 'contacted-admin') {
+      return 'pending';
+    }
+    return normalized;
+  };
+
+  const handleStatusChange = async (orderId: string, nextStatus: string) => {
+    if (!nextStatus) return;
+
+    try {
+      setUpdatingOrderId(orderId);
+      setError('');
+
+      const token = localStorage.getItem('token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/seller/orders', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({ orderId, status: nextStatus }),
+      });
+
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || 'Failed to update order status');
+      }
+
+      setOrders((current) =>
+        current.map((order) =>
+          order.orderId === orderId ? { ...order, status: nextStatus } : order
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update order status');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -171,7 +219,10 @@ export default function SellerOrdersPage() {
                     <Clock3 size={16} />
                   </div>
                 </div>
-                <p className="mt-5 text-4xl font-bold leading-none text-amber-600">{money(0)}</p>
+                <p className="mt-5 text-4xl font-bold leading-none text-amber-600">{money(orders.filter((order) => {
+                  const status = normalizeStatus(order.status);
+                  return status === 'pending-to-pay' || status === 'pending';
+                }).reduce((sum, order) => sum + order.totalAmount, 0))}</p>
                 <p className="mt-4 text-xs text-slate-400">Amount to pay admin</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -253,6 +304,22 @@ export default function SellerOrdersPage() {
                       <div className="line-clamp-1">
                         {order.items.slice(0, 2).map((item) => item.title).join(', ')}
                         {order.items.length > 2 ? ` +${order.items.length - 2} more` : ''}
+                      </div>
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        <span className="text-xs text-slate-500">Update status:</span>
+                        <select
+                          value={editableStatus(order.status)}
+                          onChange={(event) => handleStatusChange(order.orderId, event.target.value)}
+                          disabled={updatingOrderId === order.orderId}
+                          className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="processing">Processing</option>
+                          <option value="shipped">Shipped</option>
+                          <option value="delivered">Delivered</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
                       </div>
                     </div>
                   </div>

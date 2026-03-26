@@ -124,3 +124,72 @@ export async function GET(request: NextRequest) {
     });
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const token =
+      extractToken(request.headers.get('authorization')) ||
+      request.cookies.get('nextsells_token')?.value ||
+      null;
+
+    if (!token) {
+      return errorResponse('Unauthorized', 401);
+    }
+
+    const payload = verifyToken(token);
+    if (!payload || String(payload.role).toUpperCase() !== 'SELLER') {
+      return errorResponse('Seller access required', 403);
+    }
+
+    const sellerResult = await query(
+      `SELECT sp.id AS "sellerProfileId", sp.user_id AS "sellerUserId"
+       FROM seller_profiles sp
+       JOIN users u ON u.id = sp.user_id
+       WHERE u.id = $1
+       LIMIT 1`,
+      [payload.userId]
+    );
+
+    const seller = sellerResult.rows[0] as { sellerProfileId?: string; sellerUserId?: string } | undefined;
+    if (!seller) {
+      return errorResponse('Seller profile not found', 404);
+    }
+
+    const body = await request.json() as { orderId?: string; status?: string };
+    const orderId = String(body.orderId || '').trim();
+    const nextStatus = String(body.status || '').trim().toUpperCase();
+
+    if (!orderId || !nextStatus) {
+      return errorResponse('Order ID and status are required', 422);
+    }
+
+    const allowedStatuses = new Set(['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED']);
+    if (!allowedStatuses.has(nextStatus)) {
+      return errorResponse('Invalid order status', 422);
+    }
+
+    const ownershipCheck = await query(
+      `SELECT o.id
+       FROM orders o
+       JOIN order_items oi ON oi.order_id = o.id
+       JOIN products p ON p.id = oi.product_id
+       WHERE o.id = $1 AND p.seller_id = $2
+       LIMIT 1`,
+      [orderId, seller.sellerProfileId]
+    );
+
+    if (ownershipCheck.rows.length === 0) {
+      return errorResponse('Order not found for this seller', 404);
+    }
+
+    await query(
+      `UPDATE orders SET status = $1 WHERE id = $2`,
+      [nextStatus, orderId]
+    );
+
+    return successResponse({ orderId, status: nextStatus }, 'Order status updated');
+  } catch (error) {
+    console.error('Seller order status update error:', error);
+    return errorResponse('Internal server error', 500);
+  }
+}

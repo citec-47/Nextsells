@@ -1,18 +1,16 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Search, Edit, Send } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface Conversation {
-  user1: string;
-  user2: string;
+  otherUserId: string;
+  otherUserName: string;
+  otherUserRole: string;
   lastMessage: string;
   isRead: boolean;
   lastAt: string;
-  user1Name: string;
-  user1Role: string;
-  user2Name: string;
-  user2Role: string;
 }
 
 interface Message {
@@ -50,6 +48,8 @@ function Avatar({ name }: { name: string }) {
 }
 
 export default function MessagesManagement() {
+  const pathname = usePathname();
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +58,14 @@ export default function MessagesManagement() {
   const [messageText, setMessageText] = useState('');
   const [sending, setSending] = useState(false);
   const [filterRole, setFilterRole] = useState<'all' | UserRole>('all');
+  const [error, setError] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (pathname?.startsWith('/seller')) {
+      router.replace('/seller/messages');
+    }
+  }, [pathname, router]);
 
   const getToken = () =>
     typeof window !== 'undefined' ? (localStorage.getItem('token') ?? '') : '';
@@ -66,33 +74,65 @@ export default function MessagesManagement() {
     setLoading(true);
     try {
       const res = await fetch('/api/admin/messages', {
+        credentials: 'include',
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const json = await res.json();
-      if (json.success) setConversations(json.data);
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to load conversations');
+      }
+
+      if (json.success) {
+        setConversations(json.data.conversations || []);
+      }
+      setError('');
     } catch (err) {
       console.error('Load conversations error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load conversations');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadConversations(); }, [loadConversations]);
-
   const loadMessages = useCallback(async (userId: string) => {
     try {
       const res = await fetch(`/api/admin/messages/${userId}`, {
+        credentials: 'include',
         headers: { Authorization: `Bearer ${getToken()}` },
       });
       const json = await res.json();
-      if (json.success) setMessages(json.data);
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to load messages');
+      }
+
+      if (json.success) {
+        setMessages(json.data.messages || []);
+      }
+      setError('');
     } catch (err) {
       console.error('Load messages error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load messages');
     }
   }, []);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages]);
+
+  useEffect(() => {
+    loadConversations();
+    const timer = window.setInterval(() => {
+      loadConversations();
+      if (selectedUserId) {
+        loadMessages(selectedUserId);
+      }
+    }, 4000);
+
+    return () => window.clearInterval(timer);
+  }, [loadConversations, loadMessages, selectedUserId]);
+
   const handleSelectConversation = (conversation: Conversation) => {
-    const otherId = conversation.user1;
+    const otherId = conversation.otherUserId;
     setSelectedUserId(otherId);
     loadMessages(otherId);
   };
@@ -100,20 +140,52 @@ export default function MessagesManagement() {
   const handleSendMessage = async () => {
     if (!messageText.trim() || !selectedUserId) return;
 
+    const content = messageText.trim();
     setSending(true);
     try {
       const res = await fetch(`/api/admin/messages/${selectedUserId}`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content: messageText }),
+        body: JSON.stringify({ content }),
       });
-      if ((await res.json()).success) {
-        setMessageText('');
-        await loadMessages(selectedUserId);
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Failed to send message');
       }
+
+      const optimisticMessage: Message = {
+        id: String(json.data?.messageId || `optimistic-${Date.now()}`),
+        senderId: 'ADMIN',
+        receiverId: selectedUserId,
+        content,
+        isRead: true,
+        createdAt: new Date().toISOString(),
+        senderName: 'Admin',
+      };
+
+      setMessages((current) => [...current, optimisticMessage]);
+      setConversations((current) => {
+        const existing = current.find((c) => c.otherUserId === selectedUserId);
+        if (!existing) return current;
+        const updated: Conversation = {
+          ...existing,
+          lastMessage: content,
+          lastAt: optimisticMessage.createdAt,
+        };
+        const remaining = current.filter((c) => c.otherUserId !== selectedUserId);
+        return [updated, ...remaining];
+      });
+
+      setMessageText('');
+      setError('');
+      await loadMessages(selectedUserId);
+      await loadConversations();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setSending(false);
     }
@@ -124,7 +196,7 @@ export default function MessagesManagement() {
 
     // Filter by role
     if (filterRole !== 'all') {
-      list = list.filter((c) => c.user1Role === filterRole || c.user2Role === filterRole);
+      list = list.filter((c) => c.otherUserRole === filterRole);
     }
 
     // Filter by search
@@ -132,8 +204,7 @@ export default function MessagesManagement() {
       const q = search.toLowerCase();
       list = list.filter(
         (c) =>
-          c.user1Name.toLowerCase().includes(q) ||
-          c.user2Name.toLowerCase().includes(q) ||
+          c.otherUserName.toLowerCase().includes(q) ||
           c.lastMessage.toLowerCase().includes(q),
       );
     }
@@ -141,9 +212,9 @@ export default function MessagesManagement() {
     return list;
   }, [conversations, filterRole, search]);
 
-  const selectedConversation = conversations.find((c) => c.user1 === selectedUserId);
+  const selectedConversation = conversations.find((c) => c.otherUserId === selectedUserId);
   const otherUser = selectedConversation
-    ? selectedConversation.user2Name
+    ? selectedConversation.otherUserName
     : null;
 
   const fmtTime = (d: string) => {
@@ -162,6 +233,11 @@ export default function MessagesManagement() {
 
   return (
     <div className="h-full flex">
+      {error ? (
+        <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </div>
+      ) : null}
       {/* Left panel: Conversations */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         {/* Header */}
@@ -216,20 +292,20 @@ export default function MessagesManagement() {
           ) : (
             filtered.map((c) => (
               <div
-                key={`${c.user1}-${c.user2}`}
+                key={c.otherUserId}
                 onClick={() => handleSelectConversation(c)}
                 className={`p-3 border-b border-gray-100 cursor-pointer transition-colors ${
-                  selectedUserId === c.user1
+                  selectedUserId === c.otherUserId
                     ? 'bg-orange-50'
                     : 'hover:bg-gray-50'
                 }`}
               >
                 <div className="flex items-start gap-2">
-                  <Avatar name={c.user1Name} />
+                  <Avatar name={c.otherUserName} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="font-semibold text-gray-900 text-sm truncate">{c.user1Name}</p>
-                      <RoleTag role={c.user1Role as UserRole} />
+                      <p className="font-semibold text-gray-900 text-sm truncate">{c.otherUserName}</p>
+                      <RoleTag role={c.otherUserRole as UserRole} />
                     </div>
                     <p className="text-[11px] text-gray-500 mt-0.5 capitalize">
                       {c.lastMessage.split('Question about')[0]?.trim() || 'Subject'}
@@ -279,17 +355,17 @@ export default function MessagesManagement() {
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex ${msg.senderId === 'ADMIN_USER' ? 'justify-end' : 'justify-start'}`}
+                className={`flex ${msg.senderId === selectedUserId ? 'justify-start' : 'justify-end'}`}
               >
                 <div
                   className={`max-w-xs px-4 py-2 rounded-lg text-sm ${
-                    msg.senderId === 'ADMIN_USER'
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-white text-gray-900'
+                    msg.senderId === selectedUserId
+                      ? 'bg-white text-gray-900'
+                      : 'bg-orange-500 text-white'
                   }`}
                 >
                   {msg.content}
-                  <p className={`text-[10px] mt-1 ${msg.senderId === 'ADMIN_USER' ? 'text-orange-100' : 'text-gray-400'}`}>
+                  <p className={`text-[10px] mt-1 ${msg.senderId === selectedUserId ? 'text-gray-400' : 'text-orange-100'}`}>
                     {new Date(msg.createdAt).toLocaleTimeString('en-US', {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -298,6 +374,7 @@ export default function MessagesManagement() {
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}
