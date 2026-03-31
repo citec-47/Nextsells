@@ -61,6 +61,14 @@ export default function SellerDashboard() {
         const response = await fetch('/api/seller/stats', {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const rawText = await response.text();
+          throw new Error(
+            `Seller stats endpoint returned non-JSON (${response.status}). ${rawText.slice(0, 120)}`
+          );
+        }
+
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data?.error || 'Failed to fetch stats');
