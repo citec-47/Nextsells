@@ -45,9 +45,45 @@ export async function GET(
     }
 
     const { userId } = await params;
+    const limitParam = Number(request.nextUrl.searchParams.get('limit') || '40');
+    const limit = Math.min(Math.max(Number.isFinite(limitParam) ? limitParam : 40, 10), 100);
+    const before = request.nextUrl.searchParams.get('before');
+    const beforeDate = before ? new Date(before) : null;
+    const hasBeforeDate = Boolean(beforeDate && !Number.isNaN(beforeDate.getTime()));
 
     if (!(await targetExists(userId))) {
       return errorResponse('Conversation target not found', 404);
+    }
+
+    try {
+      await prisma.message.updateMany({
+        where: {
+          senderId: userId,
+          receiverId: payload.userId,
+          isRead: false,
+        },
+        data: { isRead: true },
+      });
+    } catch {
+      try {
+        await query(
+          `UPDATE messages
+           SET "isRead" = TRUE
+           WHERE COALESCE(to_jsonb(messages)->>'sender_id', to_jsonb(messages)->>'senderId') = $1
+             AND COALESCE(to_jsonb(messages)->>'receiver_id', to_jsonb(messages)->>'receiverId') = $2
+             AND COALESCE(to_jsonb(messages)->>'is_read', to_jsonb(messages)->>'isRead', 'false')::boolean = FALSE`,
+          [userId, payload.userId]
+        );
+      } catch {
+        await query(
+          `UPDATE messages
+           SET is_read = TRUE
+           WHERE COALESCE(to_jsonb(messages)->>'sender_id', to_jsonb(messages)->>'senderId') = $1
+             AND COALESCE(to_jsonb(messages)->>'receiver_id', to_jsonb(messages)->>'receiverId') = $2
+             AND COALESCE(to_jsonb(messages)->>'is_read', to_jsonb(messages)->>'isRead', 'false')::boolean = FALSE`,
+          [userId, payload.userId]
+        );
+      }
     }
 
     let visibleMessages: Array<{
@@ -67,14 +103,16 @@ export async function GET(
             { senderId: payload.userId, receiverId: userId },
             { senderId: userId, receiverId: payload.userId },
           ],
+          ...(hasBeforeDate ? { createdAt: { lt: beforeDate as Date } } : {}),
         },
         include: {
           sender: { select: { name: true } },
         },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'desc' },
+        take: limit + 1,
       });
 
-      visibleMessages = messages
+      const page = messages
         .filter(
           (message) =>
             String(message.content || '').trim() !== SYSTEM_CONVERSATION_BOOTSTRAP
@@ -89,7 +127,38 @@ export async function GET(
           createdAt: message.createdAt,
           senderName: message.sender.name,
         }));
+
+      const hasMore = page.length > limit;
+      const sliced = hasMore ? page.slice(0, limit) : page;
+      visibleMessages = sliced.reverse();
+
+      const nextCursor = hasMore
+        ? sliced[sliced.length - 1]?.createdAt?.toISOString() || null
+        : null;
+
+      return successResponse({
+        messages: visibleMessages.map((message) => ({
+          id: message.id,
+          senderId: message.senderId,
+          receiverId: message.receiverId,
+          content: message.content,
+          isRead: message.isRead,
+          createdAt: message.createdAt,
+          senderName: message.senderName,
+        })),
+        pagination: {
+          hasMore,
+          nextCursor,
+          limit,
+        },
+      });
     } catch {
+      const beforeClause = hasBeforeDate
+        ? ` AND COALESCE(to_jsonb(m)->>'created_at', to_jsonb(m)->>'createdAt', NOW()::text)::timestamptz < $3 `
+        : '';
+      const paramsList = hasBeforeDate
+        ? [payload.userId, userId, (beforeDate as Date).toISOString(), limit + 1]
+        : [payload.userId, userId, limit + 1];
       const fallback = await query(
         `SELECT
            m.id,
@@ -108,11 +177,13 @@ export async function GET(
            COALESCE(to_jsonb(m)->>'sender_id', to_jsonb(m)->>'senderId') = $2
            AND COALESCE(to_jsonb(m)->>'receiver_id', to_jsonb(m)->>'receiverId') = $1
          )
-         ORDER BY COALESCE(to_jsonb(m)->>'created_at', to_jsonb(m)->>'createdAt') ASC`,
-        [payload.userId, userId]
+         ${beforeClause}
+         ORDER BY COALESCE(to_jsonb(m)->>'created_at', to_jsonb(m)->>'createdAt') DESC
+         LIMIT $${hasBeforeDate ? '4' : '3'}`,
+        paramsList
       );
 
-      visibleMessages = (fallback.rows as Array<Record<string, unknown>>)
+      const page = (fallback.rows as Array<Record<string, unknown>>)
         .filter(
           (row) =>
             String(row.content || '').trim() !== SYSTEM_CONVERSATION_BOOTSTRAP
@@ -127,19 +198,32 @@ export async function GET(
           createdAt: new Date(String(row.createdAt || new Date().toISOString())),
           senderName: String(row.senderName || 'Unknown'),
         }));
-    }
 
-    return successResponse({
-      messages: visibleMessages.map((message) => ({
-        id: message.id,
-        senderId: message.senderId,
-        receiverId: message.receiverId,
-        content: message.content,
-        isRead: message.isRead,
-        createdAt: message.createdAt,
-        senderName: message.senderName,
-      })),
-    });
+      const hasMore = page.length > limit;
+      const sliced = hasMore ? page.slice(0, limit) : page;
+      visibleMessages = sliced.reverse();
+
+      const nextCursor = hasMore
+        ? sliced[sliced.length - 1]?.createdAt?.toISOString() || null
+        : null;
+
+      return successResponse({
+        messages: visibleMessages.map((message) => ({
+          id: message.id,
+          senderId: message.senderId,
+          receiverId: message.receiverId,
+          content: message.content,
+          isRead: message.isRead,
+          createdAt: message.createdAt,
+          senderName: message.senderName,
+        })),
+        pagination: {
+          hasMore,
+          nextCursor,
+          limit,
+        },
+      });
+    }
   } catch (error) {
     console.error('Fetch conversation error:', error);
     return errorResponse('Internal server error', 500);

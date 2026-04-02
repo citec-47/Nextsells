@@ -12,6 +12,7 @@ function isDebugNoiseMessage(content: string | null | undefined) {
 }
 
 type AdminMessageRow = {
+  id?: string;
   senderId: string;
   receiverId: string;
   senderName: string;
@@ -26,6 +27,7 @@ type AdminMessageRow = {
 async function fetchMessagesFallback(adminUserId: string): Promise<AdminMessageRow[]> {
   const result = await query(
     `SELECT
+       m.id,
        COALESCE(to_jsonb(m)->>'sender_id', to_jsonb(m)->>'senderId') AS "senderId",
        COALESCE(to_jsonb(m)->>'receiver_id', to_jsonb(m)->>'receiverId') AS "receiverId",
        COALESCE(s.name, 'Unknown') AS "senderName",
@@ -45,6 +47,7 @@ async function fetchMessagesFallback(adminUserId: string): Promise<AdminMessageR
   );
 
   return (result.rows as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id || ''),
     senderId: String(row.senderId || ''),
     receiverId: String(row.receiverId || ''),
     senderName: String(row.senderName || 'Unknown'),
@@ -112,8 +115,17 @@ export async function GET(request: NextRequest) {
       otherUserRole: string;
       lastMessage: string;
       isRead: boolean;
+      unreadCount: number;
       lastAt: Date;
     }>();
+
+    const unreadByUser = new Map<string, number>();
+    for (const message of visibleMessages) {
+      if (message.receiverId === payload.userId && !message.isRead) {
+        const current = unreadByUser.get(message.senderId) || 0;
+        unreadByUser.set(message.senderId, current + 1);
+      }
+    }
 
     for (const message of visibleMessages) {
       const isSender = message.senderId === payload.userId;
@@ -128,6 +140,7 @@ export async function GET(request: NextRequest) {
           otherUserRole,
           lastMessage: message.content,
           isRead: message.isRead,
+          unreadCount: unreadByUser.get(otherUserId) || 0,
           lastAt: message.createdAt,
         });
       }

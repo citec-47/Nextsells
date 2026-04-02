@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Search, Edit, Send } from 'lucide-react';
+import { Search, Edit, Send, ArrowLeft } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
 interface Conversation {
@@ -10,6 +10,7 @@ interface Conversation {
   otherUserRole: string;
   lastMessage: string;
   isRead: boolean;
+  unreadCount?: number;
   lastAt: string;
 }
 
@@ -59,6 +60,11 @@ export default function MessagesManagement() {
   const [sending, setSending] = useState(false);
   const [filterRole, setFilterRole] = useState<'all' | UserRole>('all');
   const [error, setError] = useState('');
+  const [showChatOnMobile, setShowChatOnMobile] = useState(false);
+  const [pagination, setPagination] = useState<{ hasMore: boolean; nextCursor: string | null }>({
+    hasMore: false,
+    nextCursor: null,
+  });
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -94,9 +100,13 @@ export default function MessagesManagement() {
     }
   }, []);
 
-  const loadMessages = useCallback(async (userId: string) => {
+  const loadMessages = useCallback(async (userId: string, before?: string, appendOlder = false) => {
     try {
-      const res = await fetch(`/api/admin/messages/${userId}`, {
+      const params = new URLSearchParams({ limit: '40' });
+      if (before) {
+        params.set('before', before);
+      }
+      const res = await fetch(`/api/admin/messages/${userId}?${params.toString()}`, {
         credentials: 'include',
         headers: { Authorization: `Bearer ${getToken()}` },
       });
@@ -106,12 +116,34 @@ export default function MessagesManagement() {
       }
 
       if (json.success) {
-        setMessages(json.data.messages || []);
+        const loadedMessages = json.data.messages || [];
+        const nextPagination = json.data.pagination || { hasMore: false, nextCursor: null };
+        setMessages((current) => (appendOlder ? [...loadedMessages, ...current] : loadedMessages));
+        setPagination({
+          hasMore: Boolean(nextPagination.hasMore),
+          nextCursor: nextPagination.nextCursor || null,
+        });
       }
       setError('');
     } catch (err) {
       console.error('Load messages error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load messages');
+    }
+  }, []);
+
+  const markConversationRead = useCallback(async (userId: string) => {
+    try {
+      await fetch('/api/messages/read', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${getToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ participantId: userId }),
+      });
+    } catch {
+      // Silent failure to avoid blocking conversation opening.
     }
   }, []);
 
@@ -134,7 +166,11 @@ export default function MessagesManagement() {
   const handleSelectConversation = (conversation: Conversation) => {
     const otherId = conversation.otherUserId;
     setSelectedUserId(otherId);
-    loadMessages(otherId);
+    setShowChatOnMobile(true);
+    void markConversationRead(otherId).then(async () => {
+      await loadMessages(otherId);
+      await loadConversations();
+    });
   };
 
   const handleSendMessage = async () => {
@@ -232,14 +268,14 @@ export default function MessagesManagement() {
   };
 
   return (
-    <div className="h-full flex">
+    <div className="flex h-full flex-col md:flex-row">
       {error ? (
         <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
           {error}
         </div>
       ) : null}
       {/* Left panel: Conversations */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`w-full bg-white border-r border-gray-200 flex flex-col md:w-80 ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
         {/* Header */}
         <div className="p-4 border-b border-gray-100 space-y-3">
           <div className="flex items-center justify-between">
@@ -314,6 +350,13 @@ export default function MessagesManagement() {
                   </div>
                   <span className="text-[11px] text-gray-400 whitespace-nowrap">{fmtTime(c.lastAt)}</span>
                 </div>
+                {(c.unreadCount || 0) > 0 && (
+                  <div className="mt-1 flex justify-end">
+                    <span className="inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                      {c.unreadCount}
+                    </span>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -322,7 +365,7 @@ export default function MessagesManagement() {
 
       {/* Right panel: Chat view */}
       {!selectedUserId ? (
-        <div className="flex-1 flex items-center justify-center flex-col gap-3 bg-gray-50">
+        <div className={`flex-1 items-center justify-center flex-col gap-3 bg-gray-50 ${showChatOnMobile ? 'hidden md:flex' : 'flex'}`}>
           <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
             <svg
               className="w-8 h-8 text-gray-300"
@@ -344,21 +387,44 @@ export default function MessagesManagement() {
           </p>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col bg-gray-50">
+        <div className={`flex-1 flex-col bg-gray-50 ${showChatOnMobile ? 'flex' : 'hidden md:flex'}`}>
           {/* Chat header */}
           <div className="bg-white border-b border-gray-200 px-6 py-4">
-            <p className="font-semibold text-gray-900">{otherUser}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold text-gray-900">{otherUser}</p>
+              <button
+                type="button"
+                onClick={() => setShowChatOnMobile(false)}
+                className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 md:hidden"
+              >
+                <ArrowLeft size={12} />
+                Back
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {pagination.hasMore && selectedUserId && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void loadMessages(selectedUserId, pagination.nextCursor || undefined, true);
+                  }}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  Load older messages
+                </button>
+              </div>
+            )}
             {messages.map((msg) => (
               <div
                 key={msg.id}
                 className={`flex ${msg.senderId === selectedUserId ? 'justify-start' : 'justify-end'}`}
               >
                 <div
-                  className={`max-w-xs px-4 py-2 rounded-lg text-sm ${
+                  className={`max-w-[86%] break-words px-4 py-2 rounded-lg text-sm sm:max-w-xs ${
                     msg.senderId === selectedUserId
                       ? 'bg-white text-gray-900'
                       : 'bg-orange-500 text-white'
@@ -378,7 +444,7 @@ export default function MessagesManagement() {
           </div>
 
           {/* Input */}
-          <div className="bg-white border-t border-gray-200 px-4 py-3 flex gap-2">
+          <div className="bg-white border-t border-gray-200 px-3 py-3 flex gap-2 sm:px-4">
             <input
               type="text"
               value={messageText}

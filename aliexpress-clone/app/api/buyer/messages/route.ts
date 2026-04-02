@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import bcrypt from 'bcryptjs';
 import { extractToken, verifyToken } from '@/lib/auth/jwt';
 import { query } from '@/lib/db';
 import { errorResponse, successResponse } from '@/lib/utils/api';
@@ -46,121 +45,6 @@ function isDebugNoiseMessage(content: string | null | undefined) {
 
 function isVisibleMessage(content: string | null | undefined) {
   return !isBootstrapMessage(content) && !isDebugNoiseMessage(content);
-}
-
-async function resolveAdminUser() {
-  try {
-    const prismaAdmin = await prisma.user.findFirst({
-      where: { role: 'ADMIN' },
-      select: { id: true, name: true, role: true },
-    });
-
-    if (prismaAdmin) {
-      return {
-        id: prismaAdmin.id,
-        name: prismaAdmin.name,
-        role: normalizeRole(prismaAdmin.role) || 'ADMIN',
-      };
-    }
-  } catch {
-    // Fall through to SQL lookup when Prisma role/query fails.
-  }
-
-  const fallback = await query(
-    `SELECT id, COALESCE(name, 'Admin') AS name, UPPER(role) AS role
-     FROM users
-     WHERE UPPER(role) = 'ADMIN'
-     ORDER BY created_at ASC
-     LIMIT 1`
-  );
-
-  if (fallback.rows.length === 0) {
-    return null;
-  }
-
-  const row = fallback.rows[0] as { id: string; name: string; role: string };
-  return {
-    id: row.id,
-    name: row.name,
-    role: normalizeRole(row.role) || 'ADMIN',
-  };
-}
-
-async function ensureAdminUserExists() {
-  const existing = await resolveAdminUser();
-  if (existing) {
-    return existing;
-  }
-
-  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@nextsells.com';
-  const adminName = process.env.DEFAULT_ADMIN_NAME || 'Platform Admin';
-  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'AdminPass123!';
-
-  try {
-    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255)`);
-    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE`);
-    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE`);
-  } catch {
-    // Continue even if alter permissions are restricted.
-  }
-
-  const existingByEmail = await query(
-    `SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
-    [adminEmail]
-  );
-
-  const hashedPassword = await bcrypt.hash(adminPassword, 10);
-
-  if (existingByEmail.rows.length > 0) {
-    const userId = String((existingByEmail.rows[0] as { id: string }).id);
-    try {
-      await query(
-        `UPDATE users
-         SET name = $1,
-             role = 'ADMIN',
-             password = $2,
-             is_verified = TRUE,
-             is_blocked = FALSE,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3`,
-        [adminName, hashedPassword, userId]
-      );
-    } catch {
-      await query(
-        `UPDATE users
-         SET name = $1,
-             role = 'ADMIN'
-         WHERE id = $2`,
-        [adminName, userId]
-      );
-    }
-  } else {
-    const adminId = 'admin-001';
-    try {
-      await query(
-        `INSERT INTO users (id, email, password, name, role, is_verified, is_blocked, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, 'ADMIN', TRUE, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [adminId, adminEmail, hashedPassword, adminName]
-      );
-    } catch {
-      try {
-        await query(
-          `INSERT INTO users (id, email, name, role)
-           VALUES ($1, $2, $3, 'ADMIN')`,
-          [adminId, adminEmail, adminName]
-        );
-      } catch {
-        const generatedId = randomUUID();
-        await query(
-          `INSERT INTO users (id, email, name, role)
-           VALUES ($1, $2, $3, 'ADMIN')`,
-          [generatedId, adminEmail, adminName]
-        );
-      }
-    }
-  }
-
-  return resolveAdminUser();
 }
 
 async function fetchMessagesFallback(currentUserId: string): Promise<SimpleMessage[]> {
@@ -335,50 +219,58 @@ export async function GET(request: NextRequest) {
     }
 
     const payload = verifyToken(token);
-    if (!payload || String(payload.role).toUpperCase() !== 'SELLER') {
-      return errorResponse('Seller access required', 403);
+    if (!payload || String(payload.role).toUpperCase() !== 'BUYER') {
+      return errorResponse('Buyer access required', 403);
     }
 
-    let sellerProfile: { id: string } | null = null;
+    let sellers: Array<{ id: string; name: string; role: string }> = [];
+
     try {
-      sellerProfile = await prisma.sellerProfile.findUnique({
-        where: { userId: payload.userId },
-        select: { id: true },
-      });
-    } catch {
-      sellerProfile = null;
-    }
-
-    const adminUser = await ensureAdminUserExists();
-
-    let buyers: Array<{ id: string; name: string; role: string }> = [];
-    if (sellerProfile) {
-      try {
-        buyers = await prisma.user.findMany({
-          where: {
-            role: 'BUYER',
-            orders: {
-              some: {
-                items: {
-                  some: {
-                    product: {
-                      sellerId: sellerProfile.id,
+      sellers = await prisma.user.findMany({
+        where: {
+          role: 'SELLER',
+          sellerProfile: {
+            is: {
+              products: {
+                some: {
+                  orderItems: {
+                    some: {
+                      order: {
+                        buyerId: payload.userId,
+                      },
                     },
                   },
                 },
               },
             },
           },
-          select: {
-            id: true,
-            name: true,
-            role: true,
-          },
-          orderBy: { name: 'asc' },
-        });
-      } catch {
-        buyers = [];
-      }
+        },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+        },
+        orderBy: { name: 'asc' },
+      });
+    } catch {
+      const fallback = await query(
+        `SELECT DISTINCT u.id, u.name, u.role
+         FROM users u
+         JOIN seller_profiles sp ON sp.user_id = u.id
+         JOIN products p ON p.seller_id = sp.id
+         JOIN order_items oi ON oi.product_id = p.id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE o.buyer_id = $1
+           AND UPPER(u.role) = 'SELLER'
+         ORDER BY u.name ASC`,
+        [payload.userId]
+      );
+
+      sellers = (fallback.rows as Array<Record<string, unknown>>).map((row) => ({
+        id: String(row.id || ''),
+        name: String(row.name || 'Seller'),
+        role: normalizeRole(String(row.role || 'SELLER')),
+      }));
     }
 
     let messages: SimpleMessage[] = [];
@@ -448,6 +340,10 @@ export async function GET(request: NextRequest) {
       const otherId = isSender ? message.receiverId : message.senderId;
       const otherName = isSender ? message.receiverName : message.senderName;
       const otherRole = isSender ? message.receiverRole : message.senderRole;
+      if (normalizeRole(otherRole) !== 'SELLER') {
+        continue;
+      }
+
       const key = toConversationKey(payload.userId, otherId);
       const conversationPreview = isBootstrapMessage(message.content)
         ? 'Conversation started'
@@ -465,21 +361,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (adminUser) {
-      const adminConversationKey = toConversationKey(payload.userId, adminUser.id);
-      if (!conversations.has(adminConversationKey)) {
-        conversations.set(adminConversationKey, {
-          key: adminConversationKey,
-          otherUserId: adminUser.id,
-          otherUserName: adminUser.name,
-          otherUserRole: adminUser.role,
-          lastMessage: 'Start a conversation with Admin',
-          unreadCount: unreadByUser.get(adminUser.id) || 0,
-          lastAt: new Date(0),
-        });
-      }
-    }
-
     const contactsMap = new Map<string, {
       userId: string;
       name: string;
@@ -489,37 +370,34 @@ export async function GET(request: NextRequest) {
       lastAt: Date;
     }>();
 
-    if (adminUser) {
-      const adminConversation = Array.from(conversations.values()).find(
-        (conversation) => conversation.otherUserId === adminUser.id
+    for (const seller of sellers) {
+      const sellerConversation = Array.from(conversations.values()).find(
+        (conversation) => conversation.otherUserId === seller.id
       );
-      contactsMap.set(adminUser.id, {
-        userId: adminUser.id,
-        name: adminUser.name,
-        role: adminUser.role,
-        hasConversation: Boolean(adminConversation),
-        unreadCount: unreadByUser.get(adminUser.id) || 0,
-        lastAt: adminConversation?.lastAt || new Date(0),
+      contactsMap.set(seller.id, {
+        userId: seller.id,
+        name: seller.name,
+        role: normalizeRole(seller.role),
+        hasConversation: Boolean(sellerConversation),
+        unreadCount: unreadByUser.get(seller.id) || 0,
+        lastAt: sellerConversation?.lastAt || new Date(0),
       });
     }
 
-    for (const buyer of buyers) {
-      const buyerConversation = Array.from(conversations.values()).find(
-        (conversation) => conversation.otherUserId === buyer.id
-      );
-      contactsMap.set(buyer.id, {
-        userId: buyer.id,
-        name: buyer.name,
-        role: normalizeRole(buyer.role),
-        hasConversation: Boolean(buyerConversation),
-        unreadCount: unreadByUser.get(buyer.id) || 0,
-        lastAt: buyerConversation?.lastAt || new Date(0),
-      });
+    for (const conversation of conversations.values()) {
+      if (!contactsMap.has(conversation.otherUserId)) {
+        contactsMap.set(conversation.otherUserId, {
+          userId: conversation.otherUserId,
+          name: conversation.otherUserName,
+          role: conversation.otherUserRole,
+          hasConversation: true,
+          unreadCount: unreadByUser.get(conversation.otherUserId) || 0,
+          lastAt: conversation.lastAt,
+        });
+      }
     }
 
     const contacts = Array.from(contactsMap.values()).sort((a, b) => {
-      if (a.role === 'ADMIN' && b.role !== 'ADMIN') return -1;
-      if (a.role !== 'ADMIN' && b.role === 'ADMIN') return 1;
       if (a.hasConversation !== b.hasConversation) return a.hasConversation ? -1 : 1;
       if (a.lastAt.getTime() !== b.lastAt.getTime()) return b.lastAt.getTime() - a.lastAt.getTime();
       return a.name.localeCompare(b.name);
@@ -547,7 +425,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error('Seller messages fetch error:', error);
+    console.error('Buyer messages fetch error:', error);
     return errorResponse('Internal server error', 500);
   }
 }
@@ -563,24 +441,17 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = verifyToken(token);
-    if (!payload || String(payload.role).toUpperCase() !== 'SELLER') {
-      return errorResponse('Seller access required', 403);
+    if (!payload || String(payload.role).toUpperCase() !== 'BUYER') {
+      return errorResponse('Buyer access required', 403);
     }
 
     const body = await request.json() as { content?: string; receiverId?: string; bootstrapOnly?: boolean };
     const content = String(body.content || '').trim();
     const bootstrapOnly = Boolean(body.bootstrapOnly);
 
-    let receiverId = body.receiverId;
-
+    const receiverId = String(body.receiverId || '').trim();
     if (!receiverId) {
-      const admin = await ensureAdminUserExists();
-
-      if (!admin) {
-        return errorResponse('No admin is available for messaging', 404);
-      }
-
-      receiverId = admin.id;
+      return errorResponse('receiverId is required', 400);
     }
 
     const receiver = await resolveUserById(receiverId);
@@ -591,6 +462,10 @@ export async function POST(request: NextRequest) {
 
     if (receiverId === payload.userId) {
       return errorResponse('Cannot send a message to yourself', 400);
+    }
+
+    if (receiver.role !== 'SELLER') {
+      return errorResponse('Buyers can only message sellers', 403);
     }
 
     const hasConversationRecord = await hasConversationRecordBetween(payload.userId, receiverId);
@@ -667,7 +542,7 @@ export async function POST(request: NextRequest) {
 
     return successResponse({ message }, 'Message sent', 201);
   } catch (error) {
-    console.error('Seller message send error:', error);
+    console.error('Buyer message send error:', error);
     return errorResponse('Internal server error', 500);
   }
 }

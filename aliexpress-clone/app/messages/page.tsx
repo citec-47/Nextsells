@@ -17,5 +17,9 @@ export default async function MessagesEntryPage() {
     redirect('/seller/messages');
   }
 
+  if (role === 'buyer') {
+    redirect('/buyer/messages');
+  }
+
   redirect('/unauthorized');
 }

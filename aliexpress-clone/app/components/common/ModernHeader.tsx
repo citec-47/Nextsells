@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Heart, ShoppingCart, User, Menu, X, Search, ChevronDown, Store, LogOut } from 'lucide-react';
+import { Heart, ShoppingCart, User, Menu, X, Search, ChevronDown, Store, LogOut, MessageSquare } from 'lucide-react';
 import { useShopState } from '../buyer/ShopStateProvider';
 import { useAuth0User } from '@/lib/auth/auth0Client';
 import TopPromoBanner from './TopPromoBanner';
@@ -17,6 +17,7 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const categoryMenuRef = useRef<HTMLDivElement>(null);
@@ -55,6 +56,38 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showAccountMenu, showCategoryMenu]);
+
+  useEffect(() => {
+    if (!isAuthenticated || isAdmin) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const loadUnread = async () => {
+      try {
+        const token = localStorage.getItem('token') || '';
+        const res = await fetch('/api/messages/unread', {
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+          setUnreadCount(Number(json.data?.totalUnread || 0));
+        }
+      } catch {
+        // Ignore badge polling errors.
+      }
+    };
+
+    void loadUnread();
+    const timer = window.setInterval(() => {
+      void loadUnread();
+    }, 4000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isAdmin, isAuthenticated]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,6 +211,23 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
                 </div>
                 <span className="text-sm font-medium hidden lg:block">Cart</span>
               </Link>
+
+              {isAuthenticated && !isAdmin && (
+                <Link
+                  href="/messages"
+                  className="flex items-center gap-1.5 px-3 py-2 text-gray-700 hover:text-blue-600 transition-colors relative"
+                >
+                  <div className="relative">
+                    <MessageSquare size={20} />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-1">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-sm font-medium hidden lg:block">Messages</span>
+                </Link>
+              )}
 
               {/* Account Dropdown */}
               <div className="relative" ref={accountMenuRef}>
@@ -369,6 +419,18 @@ export default function ModernHeader({ onSearch }: HeaderProps) {
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       ❤️ My Wishlist
+                    </Link>
+                    <Link
+                      href="/messages"
+                      className="py-3 px-4 hover:bg-gray-50 rounded-lg text-sm font-medium text-gray-700 flex items-center gap-2"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      💬 Messages
+                      {unreadCount > 0 ? (
+                        <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      ) : null}
                     </Link>
                     <Link
                       href="/seller/dashboard"

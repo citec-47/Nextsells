@@ -3,6 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   Bell,
   ChevronDown,
@@ -43,6 +44,34 @@ export default function SellerShell({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const { user } = useAuth0User();
   const { platformName } = usePlatformBrand();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const loadUnread = async () => {
+      try {
+        const token = localStorage.getItem('token') || '';
+        const res = await fetch('/api/messages/unread', {
+          credentials: 'include',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const json = await res.json();
+        if (res.ok && json.success) {
+          setUnreadCount(Number(json.data?.totalUnread || 0));
+        }
+      } catch {
+        // Ignore badge polling errors.
+      }
+    };
+
+    void loadUnread();
+    const timer = window.setInterval(() => {
+      void loadUnread();
+    }, 3500);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
 
   if (HIDDEN_SHELL_ROUTES.has(pathname)) {
     return <>{children}</>;
@@ -81,6 +110,11 @@ export default function SellerShell({ children }: { children: React.ReactNode })
               >
                 <Icon size={16} />
                 <span>{item.label}</span>
+                {item.href === '/seller/messages' && unreadCount > 0 ? (
+                  <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
