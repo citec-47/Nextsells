@@ -48,18 +48,101 @@ async function getSellerContext(userId: string) {
   };
 }
 
-async function computeSellerRevenue(sellerProfileId: string) {
+async function hasTable(tableName: string) {
   const result = await query(
-    `SELECT COALESCE(SUM(oi.subtotal), 0)::float AS total
-     FROM order_items oi
-     JOIN orders o ON o.id = oi.order_id
-     JOIN products p ON p.id = oi.product_id
-     WHERE p.seller_id = $1
-       AND o.status IN ('PAID', 'DELIVERED', 'COMPLETED')`,
-    [sellerProfileId]
+    `SELECT 1
+     FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = $1
+     LIMIT 1`,
+    [tableName]
   );
 
-  return Number(result.rows[0]?.total || 0);
+  return result.rows.length > 0;
+}
+
+async function hasColumn(tableName: string, columnName: string) {
+  const result = await query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+
+  return result.rows.length > 0;
+}
+
+async function computeSellerRevenue(sellerProfileId: string, sellerUserId: string) {
+  const sellerKeys = [sellerProfileId, sellerUserId].filter(Boolean);
+
+  try {
+    const orderItemsExists = await hasTable('order_items');
+    if (orderItemsExists) {
+      const hasSubtotal = await hasColumn('order_items', 'subtotal');
+      const amountExpr = hasSubtotal
+        ? 'oi.subtotal'
+        : '(COALESCE(oi.quantity, 1) * COALESCE(oi.price_per_unit, 0))';
+
+      const result = await query(
+        `SELECT COALESCE(SUM(${amountExpr}), 0)::float AS total
+         FROM order_items oi
+         JOIN orders o ON o.id = oi.order_id
+         JOIN products p ON p.id = oi.product_id
+         WHERE p.seller_id = ANY($1::text[])
+           AND UPPER(COALESCE(o.status, '')) IN ('PAID', 'DELIVERED', 'COMPLETED')`,
+        [sellerKeys]
+      );
+
+      return Number(result.rows[0]?.total || 0);
+    }
+  } catch (error) {
+    console.warn('Payments revenue: order_items path failed, falling back to legacy schema', error);
+  }
+
+  try {
+    const hasTotalAmount = await hasColumn('orders', 'total_amount');
+    const hasTotalPrice = await hasColumn('orders', 'total_price');
+    const hasOrderProductId = await hasColumn('orders', 'product_id');
+    const orderAmountExpr = hasTotalAmount
+      ? 'o.total_amount'
+      : hasTotalPrice
+        ? 'o.total_price'
+        : '(COALESCE(o.quantity, 1) * COALESCE(p.price, 0))';
+
+    if (hasOrderProductId) {
+      const result = await query(
+        `SELECT COALESCE(SUM(${orderAmountExpr}), 0)::float AS total
+         FROM orders o
+         JOIN products p ON p.id = o.product_id
+         WHERE p.seller_id = ANY($1::text[])
+           AND UPPER(COALESCE(o.status, '')) IN ('PAID', 'DELIVERED', 'COMPLETED')`,
+        [sellerKeys]
+      );
+
+      return Number(result.rows[0]?.total || 0);
+    }
+
+    const hasProfileTotalRevenue = await hasColumn('seller_profiles', 'total_revenue');
+    const hasProfileTotalRevenueCamel = await hasColumn('seller_profiles', 'totalRevenue');
+
+    if (hasProfileTotalRevenue || hasProfileTotalRevenueCamel) {
+      const profileRevenueColumn = hasProfileTotalRevenue ? 'total_revenue' : '"totalRevenue"';
+      const result = await query(
+        `SELECT COALESCE(${profileRevenueColumn}, 0)::float AS total
+         FROM seller_profiles
+         WHERE id = $1 OR user_id = $2
+         LIMIT 1`,
+        [sellerProfileId, sellerUserId]
+      );
+
+      return Number(result.rows[0]?.total || 0);
+    }
+
+    return 0;
+  } catch (error) {
+    console.warn('Payments revenue: legacy orders path failed, returning 0 revenue', error);
+    return 0;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -86,7 +169,7 @@ export async function GET(request: NextRequest) {
     }
 
     const [revenue, withdrawalsRes] = await Promise.all([
-      computeSellerRevenue(seller.sellerProfileId),
+      computeSellerRevenue(seller.sellerProfileId, seller.sellerUserId),
       query(
         `SELECT
            id,

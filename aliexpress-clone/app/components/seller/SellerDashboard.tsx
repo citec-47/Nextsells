@@ -32,6 +32,26 @@ interface DashboardStats {
 
 type RangeKey = '7D' | '30D' | '90D' | 'ALL';
 
+const VISITOR_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+const VISITOR_MIN = 1;
+const VISITOR_MAX = 1000;
+const VISITOR_STORAGE_KEY = 'seller_dashboard_live_visitors';
+const VISITOR_UPDATED_AT_KEY = 'seller_dashboard_live_visitors_updated_at';
+
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function generateRealisticVisitorCount(previous: number, min = VISITOR_MIN, max = VISITOR_MAX) {
+  const baselineShift = randomInt(-35, 35);
+  const occasionalSpike = Math.random() < 0.08 ? randomInt(-180, 220) : 0;
+  return clamp(previous + baselineShift + occasionalSpike, min, max);
+}
+
 function getStatusLabel(status: string) {
   if (status === 'APPROVED') return 'Active';
   if (status === 'REJECTED') return 'Rejected';
@@ -53,6 +73,8 @@ export default function SellerDashboard() {
   const [storeName, setStoreName] = useState('');
   const [storeStatus, setStoreStatus] = useState('');
   const [activeRange, setActiveRange] = useState<RangeKey>('30D');
+  const [visitorCount, setVisitorCount] = useState<number | null>(null);
+  const [isVisitorUpdating, setIsVisitorUpdating] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -86,6 +108,57 @@ export default function SellerDashboard() {
     fetchStats();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || visitorCount !== null) return;
+
+    const savedCount = window.localStorage.getItem(VISITOR_STORAGE_KEY);
+    const savedUpdatedAt = window.localStorage.getItem(VISITOR_UPDATED_AT_KEY);
+
+    if (savedCount && savedUpdatedAt) {
+      const parsedCount = Number(savedCount);
+      const parsedUpdatedAt = Number(savedUpdatedAt);
+      if (!Number.isNaN(parsedCount) && !Number.isNaN(parsedUpdatedAt)) {
+        const now = Date.now();
+        if (now - parsedUpdatedAt >= VISITOR_UPDATE_INTERVAL_MS) {
+          const next = generateRealisticVisitorCount(parsedCount);
+          setVisitorCount(next);
+          window.localStorage.setItem(VISITOR_STORAGE_KEY, String(next));
+          window.localStorage.setItem(VISITOR_UPDATED_AT_KEY, String(now));
+        } else {
+          setVisitorCount(clamp(parsedCount, VISITOR_MIN, VISITOR_MAX));
+        }
+        return;
+      }
+    }
+
+    const initialFromStats = clamp(stats?.storeVisitors ?? randomInt(18, 420), VISITOR_MIN, VISITOR_MAX);
+    const now = Date.now();
+    setVisitorCount(initialFromStats);
+    window.localStorage.setItem(VISITOR_STORAGE_KEY, String(initialFromStats));
+    window.localStorage.setItem(VISITOR_UPDATED_AT_KEY, String(now));
+  }, [stats?.storeVisitors, visitorCount]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const interval = window.setInterval(() => {
+      setVisitorCount((previous) => {
+        const current = previous ?? clamp(stats?.storeVisitors ?? randomInt(18, 420), VISITOR_MIN, VISITOR_MAX);
+        const next = generateRealisticVisitorCount(current);
+        const now = Date.now();
+
+        window.localStorage.setItem(VISITOR_STORAGE_KEY, String(next));
+        window.localStorage.setItem(VISITOR_UPDATED_AT_KEY, String(now));
+
+        setIsVisitorUpdating(true);
+        window.setTimeout(() => setIsVisitorUpdating(false), 450);
+        return next;
+      });
+    }, VISITOR_UPDATE_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [stats?.storeVisitors]);
+
   const fullMoney = (amount: number) =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -107,7 +180,7 @@ export default function SellerDashboard() {
   const todayProfit = stats?.totalProfit ?? 0;
   const totalRevenue = stats?.totalRevenue ?? 0;
   const availableBalance = stats?.availableBalance ?? 0;
-  const storeVisitors = stats?.storeVisitors ?? 0;
+  const liveVisitors = visitorCount ?? clamp(stats?.storeVisitors ?? 0, VISITOR_MIN, VISITOR_MAX);
   const totalOrders = stats?.totalOrders ?? 0;
   const publishedProducts = stats?.publishedProducts ?? 0;
   const firstName = user?.name?.split(' ')[0] || 'User';
@@ -287,9 +360,15 @@ export default function SellerDashboard() {
                   <div className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-100 text-blue-700 shadow-sm">
                     <Eye size={16} />
                   </div>
-                  <p className="text-3xl font-bold leading-none text-[#173b62]">{storeVisitors.toLocaleString()}</p>
-                  <p className="mt-1.5 text-sm font-semibold text-slate-600">Store Views</p>
-                  <p className="text-xs text-slate-400">This month</p>
+                  <p
+                    className={`text-3xl font-bold leading-none text-[#173b62] transition-all duration-500 ${
+                      isVisitorUpdating ? 'scale-[1.03] text-blue-700' : 'scale-100'
+                    }`}
+                  >
+                    {liveVisitors.toLocaleString()}
+                  </p>
+                  <p className="mt-1.5 text-sm font-semibold text-slate-600">Visitors (Last Hour)</p>
+                  <p className="text-xs text-slate-400">Auto-updates every 60 minutes</p>
                 </div>
 
                 <div className="rounded-xl border-2 border-cyan-300 bg-white p-4 shadow-sm">
