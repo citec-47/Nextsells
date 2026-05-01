@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
       return errorResponse('A valid payment amount is required', 422);
     }
 
-    const totalRevenue = await computeSellerRevenue(seller.sellerProfileId);
+    const totalRevenue = await computeSellerRevenue(seller.sellerProfileId, seller.sellerUserId);
 
     const withdrawalAggRes = await query(
       `SELECT

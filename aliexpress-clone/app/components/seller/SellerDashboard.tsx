@@ -278,11 +278,38 @@ export default function SellerDashboard() {
 
             <Link
               href="/seller/products"
-              className="inline-flex items-center gap-2 rounded-xl bg-[#173b62] px-4 py-2 text-xs font-semibold leading-none text-white transition-colors hover:bg-[#12304f]"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#ea3a32] px-4 py-2 text-xs font-semibold leading-none text-white transition-colors hover:bg-[#d5312a]"
             >
               <Plus size={16} />
               <span>Manage Products</span>
             </Link>
+          </div>
+
+          {/* Advertisement Plan Banner */}
+          <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-[#1f456d] text-white">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-sm font-semibold text-slate-800">Advertisement Plan: 1 Month</h3>
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">ACTIVE</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">$699 · 30 days</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="w-[360px]">
+                  <div className="h-2 w-full rounded-full bg-slate-100">
+                    <div className="h-2 rounded-full bg-[#173b62]" style={{ width: '68%' }} />
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">11 days left</p>
+                </div>
+                <Link href="/seller/advertisements" className="text-sm font-semibold text-[#173b62] hover:underline">View Details →</Link>
+              </div>
+            </div>
           </div>
 
           <section className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">

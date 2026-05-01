@@ -25,13 +25,17 @@ const NAV_ITEMS = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   { label: 'Users', href: '/admin/users', icon: Users },
   { label: 'Sellers', href: '/admin/sellers', icon: Store },
-  { label: 'Products', href: '/admin/products', icon: Package },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
   { label: 'Payments', href: '/admin/payments', icon: CreditCard },
   { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
   { label: 'Loans', href: '/admin/loans', icon: Landmark },
   { label: 'Visitors', href: '/admin/visitors', icon: Eye },
+  { label: 'Premium', href: '/admin/premium', icon: Package },
+  { label: 'Advertisements', href: '/admin/advertisements', icon: ShoppingCart },
+  { label: 'AI Analysis', href: '/admin/analysis', icon: BarChart2 },
   { label: 'Analytics', href: '/admin/analytics', icon: BarChart2 },
+  { label: 'Admin User', href: '/admin/admin-user', icon: Users },
+  { label: 'ADMIN', href: '/admin', icon: LayoutDashboard },
   { label: 'Settings', href: '/admin/settings', icon: Settings },
 ];
 
@@ -98,13 +102,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       {/* ── Sidebar ── */}
-      <aside className="w-56 bg-[#1e2140] flex flex-col fixed inset-y-0 left-0 z-20 shrink-0">
+      <aside className="w-56 bg-[#ea3a32] flex flex-col fixed inset-y-0 left-0 z-20 shrink-0">
         {/* Logo */}
-        <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white font-bold text-base">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10">
+          <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center text-white font-bold text-base">
             {platformInitial}
           </div>
-          <span className="text-white font-semibold text-sm tracking-wide">{platformName}</span>
+          <div className="leading-tight">
+            <div className="text-white font-semibold text-sm tracking-wide">{platformName}</div>
+            <div className="text-orange-200 text-[11px]">Wholesalers</div>
+          </div>
         </div>
 
         {/* Nav */}
@@ -117,8 +124,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 href={href}
                 className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   active
-                    ? 'bg-orange-500 text-white'
-                    : 'text-gray-400 hover:bg-white/10 hover:text-white'
+                    ? 'bg-white text-[#ea3a32]'
+                    : 'text-white/90 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 <Icon size={15} />
@@ -136,12 +143,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* Bottom user bar */}
         <div className="px-3 py-4 border-t border-white/10 space-y-1">
           <div className="flex items-center gap-3 px-2 py-2">
-            <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
+            <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-[#ea3a32] text-xs font-bold shrink-0">
               {admin.initials}
             </div>
             <div className="min-w-0">
               <p className="text-white text-xs font-medium truncate">{admin.name}</p>
-              <p className="text-gray-400 text-[10px]">Admin</p>
+              <p className="text-white/90 text-[10px]">Admin</p>
             </div>
           </div>
           <Link

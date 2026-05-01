@@ -278,3 +278,22 @@ model Message {
   @@index([senderId])
   @@index([receiverId])
 }
+
+// AI Subscriptions for sellers (admin-reviewed)
+model AiSubscription {
+  id            String   @id @default(cuid())
+  sellerId      String
+  status        String   @default("INACTIVE") // INACTIVE, PENDING, ACTIVE, EXPIRED, REJECTED
+  paymentAmount Int      @default(500)
+  paymentProof  String?
+  currency      String   @default("USD")
+  requestedAt   DateTime @default(now())
+  approvedAt    DateTime?
+  expiresAt     DateTime?
+  approvedBy    String?
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([sellerId, status])
+}

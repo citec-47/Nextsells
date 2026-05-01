@@ -1,4 +1,3 @@
-import { auth0 } from './lib/auth0';
 import { NextResponse } from 'next/server';
 
 export async function proxy(request: Request) {
@@ -9,25 +8,9 @@ export async function proxy(request: Request) {
     console.log(`[PROXY] ${request.method} ${url.pathname}`);
   }
 
-  try {
-    // Local JWT auth is used for app routes. Keep Auth0 middleware scoped only
-    // to Auth0 handler endpoints so it doesn't swallow normal route handling.
-    if (!url.pathname.startsWith('/api/auth/')) {
-      return NextResponse.next();
-    }
-
-    const response = await auth0.middleware(request);
-    
-    // Log authentication events
-    if (url.pathname.startsWith('/api/auth/')) {
-      console.log(`[AUTH FLOW] ${url.pathname} - Status: ${response.status}`);
-    }
-    
-    return response;
-  } catch (error) {
-    console.error('[PROXY ERROR]', error);
-    throw error;
-  }
+  // Do not run auth middleware in proxy. Auth routes are handled by their own
+  // route handlers under app/api/auth/* and should not be short-circuited here.
+  return NextResponse.next();
 }
 
 export const config = {

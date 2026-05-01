@@ -15,6 +15,10 @@ import {
   Shield,
   ShoppingCart,
   Store,
+  Star,
+  Banknote,
+  Megaphone,
+  Activity,
 } from 'lucide-react';
 import { useAuth0User } from '@/lib/auth/auth0Client';
 import { usePlatformBrand } from '@/app/hooks/usePlatformBrand';
@@ -34,7 +38,11 @@ const NAV_ITEMS = [
   { icon: Store, label: 'My Store', href: '/seller/store' },
   { icon: Plus, label: 'Add Products', href: '/seller/products' },
   { icon: ShoppingCart, label: 'Orders', href: '/seller/orders' },
+  { icon: Star, label: 'Reviews', href: '/seller/reviews' },
   { icon: CreditCard, label: 'Payments', href: '/seller/payments' },
+  { icon: Banknote, label: 'Loans', href: '/seller/loans' },
+  { icon: Megaphone, label: 'Advertisements', href: '/seller/advertisements' },
+  { icon: Activity, label: 'AI Analysis', href: '/seller/analysis' },
   { icon: MessageSquare, label: 'Messages', href: '/seller/messages' },
 ];
 
@@ -82,17 +90,19 @@ export default function SellerShell({ children }: { children: React.ReactNode })
   const brandHead = brandIsHub ? platformName.slice(0, -3) : platformName;
 
   return (
-    <div className="flex min-h-screen bg-[#edf1f7] text-slate-900">
-      <aside className="hidden w-[224px] flex-col bg-[#1f456d] text-white shadow-lg lg:flex">
+    <div className="flex min-h-screen bg-[#fafafa] text-slate-900">
+      <aside className="hidden w-[224px] flex-col bg-[#ea3a32] text-white shadow-lg lg:flex">
         <div className="border-b border-white/10 px-5 py-5">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-[#1f456d]">
-              <Shield size={20} strokeWidth={2.5} />
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-400 text-white">
+                <Shield size={20} strokeWidth={2.5} />
+              </div>
+              <h1 className="text-[20px] font-bold leading-none tracking-tight text-white">AliExpress</h1>
             </div>
-            <h1 className="text-[24px] font-bold leading-none tracking-tight">
-              <span className="text-white">{brandHead}</span>
-              {brandIsHub ? <span className="text-amber-400">Hub</span> : null}
-            </h1>
+            <div className="mt-1">
+              <span className="text-[12px] text-white/80">Wholesalers</span>
+            </div>
           </div>
         </div>
 
@@ -100,12 +110,12 @@ export default function SellerShell({ children }: { children: React.ReactNode })
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || (item.href !== '/seller/dashboard' && pathname.startsWith(item.href));
-            return (
+              return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`mx-1.5 flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
-                  active ? 'bg-white text-[#173b62]' : 'text-white/85 hover:bg-white/10 hover:text-white'
+                  active ? 'bg-white text-[#ea3a32]' : 'text-white/90 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 <Icon size={16} />
