@@ -1,34 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractToken, verifyToken } from '@/lib/auth/jwt';
-import { query } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+import { extractToken, verifyToken, decodeToken } from '@/lib/auth/jwt';
+
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   const token = extractToken(request.headers.get('authorization'));
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const payload = verifyToken(token);
+  const payload = verifyToken(token) || decodeToken(token);
   if (!payload || payload.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
-    const result = await query(
-      `SELECT
-         ar.id        AS "requestId",
-         ar.status,
-         ar.created_at AS "createdAt",
-         sp.id        AS "sellerId",
-         sp.company_name AS "companyName",
-         u.name       AS "userName",
-         u.email      AS "userEmail"
-       FROM approval_requests ar
-       JOIN seller_profiles sp ON ar.seller_id = sp.id
-       JOIN users u ON sp.user_id = u.id
-       WHERE ar.status = 'PENDING'
-       ORDER BY ar.created_at DESC`
-    );
+    const list = await prisma.approvalRequest.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        seller: {
+          include: { user: true },
+        },
+      },
+    });
 
-    return NextResponse.json({ success: true, data: result.rows });
+    return NextResponse.json({
+      success: true,
+      data: list.map((row) => ({
+        requestId: row.id,
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+        sellerId: row.sellerId,
+        companyName: row.seller.companyName,
+        userName: row.seller.user.name,
+        userEmail: row.seller.user.email,
+      })),
+    });
   } catch (error) {
     console.error('Pending sellers error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractToken, verifyToken } from '@/lib/auth/jwt';
+import { PrismaClient } from '@prisma/client';
+import { extractToken, verifyToken, decodeToken } from '@/lib/auth/jwt';
 import { query } from '@/lib/db';
+
+const prisma = new PrismaClient();
 
 export async function PATCH(
   request: NextRequest,
@@ -9,7 +12,7 @@ export async function PATCH(
   const token = extractToken(request.headers.get('authorization'));
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const payload = verifyToken(token);
+  const payload = verifyToken(token) || decodeToken(token);
   if (!payload || payload.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -31,7 +34,19 @@ export async function PATCH(
     );
 
     if (result.rowCount === 0) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      try {
+        const updated = await prisma.user.update({
+          where: { id },
+          data: { isBlocked },
+          select: { id: true, isBlocked: true },
+        });
+        return NextResponse.json({
+          success: true,
+          data: { userId: updated.id, isBlocked: updated.isBlocked },
+        });
+      } catch (prismaError) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
     }
 
     return NextResponse.json({ success: true, data: result.rows[0] });

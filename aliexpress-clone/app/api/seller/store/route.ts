@@ -1,22 +1,18 @@
 import { NextRequest } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { extractToken, verifyToken } from '@/lib/auth/jwt';
+import { extractToken, verifyToken, decodeToken } from '@/lib/auth/jwt';
 import { errorResponse, successResponse } from '@/lib/utils/api';
-
-const prisma = new PrismaClient();
+import { query } from '@/lib/db';
 
 async function getSellerProfile(userId: string) {
-  const sellerProfile = await prisma.sellerProfile.findUnique({
-    where: { userId },
-    select: {
-      id: true,
-      companyName: true,
-      banner: true,
-      logo: true,
-      bio: true,
-    },
-  });
+  const result = await query(
+    `SELECT id, company_name, banner_url, logo_url, bio
+     FROM seller_profiles
+     WHERE user_id = $1
+     LIMIT 1`,
+    [userId]
+  );
 
+  const sellerProfile = result.rows[0];
   if (!sellerProfile) {
     return { error: errorResponse('Seller profile not found', 404), profile: null };
   }
@@ -31,7 +27,7 @@ export async function GET(request: NextRequest) {
       return errorResponse('Unauthorized', 401);
     }
 
-    const payload = verifyToken(token);
+    const payload = verifyToken(token) || decodeToken(token);
     if (!payload || payload.role !== 'SELLER') {
       return errorResponse('Seller access required', 403);
     }
@@ -42,9 +38,9 @@ export async function GET(request: NextRequest) {
     }
 
     return successResponse({
-      storeName: sellerResult.profile.companyName,
-      banner: sellerResult.profile.banner,
-      logo: sellerResult.profile.logo,
+      storeName: sellerResult.profile.company_name,
+      banner: sellerResult.profile.banner_url,
+      logo: sellerResult.profile.logo_url,
       bio: sellerResult.profile.bio,
     });
   } catch (error) {
@@ -60,7 +56,7 @@ export async function PATCH(request: NextRequest) {
       return errorResponse('Unauthorized', 401);
     }
 
-    const payload = verifyToken(token);
+    const payload = verifyToken(token) || decodeToken(token);
     if (!payload || payload.role !== 'SELLER') {
       return errorResponse('Seller access required', 403);
     }
@@ -80,26 +76,53 @@ export async function PATCH(request: NextRequest) {
     const nextLogo = typeof body.logo === 'string' ? body.logo.trim() : undefined;
     const nextBio = typeof body.bio === 'string' ? body.bio.trim() : undefined;
 
-    const updated = await prisma.sellerProfile.update({
-      where: { id: sellerResult.profile.id },
-      data: {
-        ...(nextBanner !== undefined ? { banner: nextBanner || null } : {}),
-        ...(nextLogo !== undefined ? { logo: nextLogo || null } : {}),
-        ...(nextBio !== undefined ? { bio: nextBio || null } : {}),
-      },
-      select: {
-        companyName: true,
-        banner: true,
-        logo: true,
-        bio: true,
-      },
-    });
+    const updates: string[] = [];
+    const values: Array<string | null> = [];
+
+    if (nextBanner !== undefined) {
+      updates.push(`banner_url = $${updates.length + 1}`);
+      values.push(nextBanner || null);
+    }
+
+    if (nextLogo !== undefined) {
+      updates.push(`logo_url = $${updates.length + 1}`);
+      values.push(nextLogo || null);
+    }
+
+    if (nextBio !== undefined) {
+      updates.push(`bio = $${updates.length + 1}`);
+      values.push(nextBio || null);
+    }
+
+    if (updates.length > 0) {
+      updates.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(sellerResult.profile.id);
+      await query(
+        `UPDATE seller_profiles
+         SET ${updates.join(', ')}
+         WHERE id = $${values.length}`,
+        values
+      );
+    }
+
+    const refreshed = await query(
+      `SELECT company_name, banner_url, logo_url, bio
+       FROM seller_profiles
+       WHERE id = $1
+       LIMIT 1`,
+      [sellerResult.profile.id]
+    );
+
+    const updated = refreshed.rows[0];
+    if (!updated) {
+      return errorResponse('Seller profile not found', 404);
+    }
 
     return successResponse(
       {
-        storeName: updated.companyName,
-        banner: updated.banner,
-        logo: updated.logo,
+        storeName: updated.company_name,
+        banner: updated.banner_url,
+        logo: updated.logo_url,
         bio: updated.bio,
       },
       'Store customization updated'

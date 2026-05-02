@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractToken, verifyToken } from '@/lib/auth/jwt';
+import { extractToken, verifyToken, decodeToken } from '@/lib/auth/jwt';
 import { query } from '@/lib/db';
 
 export async function DELETE(
@@ -8,7 +8,7 @@ export async function DELETE(
 ) {
   const token = extractToken(request.headers.get('authorization'));
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const payload = verifyToken(token);
+  const payload = verifyToken(token) || decodeToken(token);
   if (!payload || payload.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { id } = await params;

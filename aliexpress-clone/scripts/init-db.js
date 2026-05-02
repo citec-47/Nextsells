@@ -35,6 +35,7 @@ async function initializeDatabase(client) {
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255),
       name VARCHAR(255),
+      phone VARCHAR(50),
       role VARCHAR(50) DEFAULT 'BUYER',
       avatar_url VARCHAR(500),
       is_verified BOOLEAN DEFAULT FALSE,
@@ -46,6 +47,7 @@ async function initializeDatabase(client) {
   console.log('  ✓ users table created');
 
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255);`);
+  await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;`);
   await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;`);
   console.log('  ✓ users auth columns ensured');
@@ -57,9 +59,11 @@ async function initializeDatabase(client) {
       user_id VARCHAR(255) NOT NULL UNIQUE,
       company_name VARCHAR(255),
       description TEXT,
+      bio TEXT,
       phone VARCHAR(20),
       country VARCHAR(100),
       logo_url VARCHAR(500),
+      banner_url VARCHAR(500),
       onboarding_status VARCHAR(50) DEFAULT 'NOT_STARTED',
       approval_date TIMESTAMP,
       rejection_reason TEXT,
@@ -69,6 +73,9 @@ async function initializeDatabase(client) {
     );
   `);
   console.log('  ✓ seller_profiles table created');
+
+  await client.query(`ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS bio TEXT;`);
+  await client.query(`ALTER TABLE seller_profiles ADD COLUMN IF NOT EXISTS banner_url VARCHAR(500);`);
 
   // Create products table
   await client.query(`

@@ -1,9 +1,12 @@
 import { NextRequest } from 'next/server';
+import { PrismaClient } from '@prisma/client';
 import { auth0 } from '@/lib/auth0';
 import { comparePassword } from '@/lib/auth/password';
 import { generateToken } from '@/lib/auth/jwt';
 import { errorResponse, successResponse, validateRequired, validationError } from '@/lib/utils/api';
 import { query } from '@/lib/db';
+
+const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   try {
@@ -38,7 +41,21 @@ export async function POST(req: NextRequest) {
       [email]
     );
 
-    const user = result.rows[0];
+    let user = result.rows[0];
+
+    if (!user) {
+      const prismaUser = await prisma.user.findUnique({ where: { email } });
+      if (prismaUser) {
+        user = {
+          id: prismaUser.id,
+          email: prismaUser.email,
+          name: prismaUser.name,
+          role: prismaUser.role,
+          password: prismaUser.password,
+          is_blocked: prismaUser.isBlocked,
+        };
+      }
+    }
 
     if (!user || !user.password) {
       return errorResponse('Invalid email or password', 401, 'Login failed');

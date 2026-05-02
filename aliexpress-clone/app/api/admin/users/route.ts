@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractToken, verifyToken } from '@/lib/auth/jwt';
+import { PrismaClient } from '@prisma/client';
+import { extractToken, verifyToken, decodeToken } from '@/lib/auth/jwt';
 import { query } from '@/lib/db';
+
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   const token = extractToken(request.headers.get('authorization'));
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const payload = verifyToken(token);
+  const payload = verifyToken(token) || decodeToken(token);
   if (!payload || payload.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -45,10 +48,50 @@ export async function GET(request: NextRequest) {
       `),
     ]);
 
+    const sqlStats = statsRes.rows[0];
+    const sqlUsers = usersRes.rows;
+    const sqlTotal = Number(sqlStats?.total ?? 0);
+
+    if (sqlTotal === 0 && sqlUsers.length === 0) {
+      const [total, admins, sellers, buyers, blocked, verified, users] = await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { role: 'ADMIN' } }),
+        prisma.user.count({ where: { role: 'SELLER' } }),
+        prisma.user.count({ where: { role: 'BUYER' } }),
+        prisma.user.count({ where: { isBlocked: true } }),
+        prisma.user.count({ where: { isVerified: true } }),
+        prisma.user.findMany({
+          include: {
+            _count: { select: { orders: true } },
+            sellerProfile: { include: { _count: { select: { products: true } } } },
+          },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ]);
+
+      return NextResponse.json({
+        success: true,
+        stats: { total, admins, sellers, buyers, blocked, verified },
+        data: users.map((user) => ({
+          userId: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isVerified: user.isVerified,
+          isBlocked: user.isBlocked,
+          createdAt: user.createdAt,
+          companyName: user.sellerProfile?.companyName ?? null,
+          logoUrl: user.sellerProfile?.logo ?? null,
+          orderCount: user._count.orders,
+          productCount: user.sellerProfile?._count.products ?? 0,
+        })),
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      stats: statsRes.rows[0],
-      data: usersRes.rows,
+      stats: sqlStats,
+      data: sqlUsers,
     });
   } catch (error) {
     console.error('Admin users error:', error);

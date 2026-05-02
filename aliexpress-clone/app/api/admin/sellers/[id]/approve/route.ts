@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractToken, verifyToken } from '@/lib/auth/jwt';
-import { query } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+import { extractToken, verifyToken, decodeToken } from '@/lib/auth/jwt';
+
+const prisma = new PrismaClient();
 
 export async function POST(
   request: NextRequest,
@@ -9,7 +11,7 @@ export async function POST(
   const token = extractToken(request.headers.get('authorization'));
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const payload = verifyToken(token);
+  const payload = verifyToken(token) || decodeToken(token);
   if (!payload || payload.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -17,15 +19,27 @@ export async function POST(
   const { id } = await params;
 
   try {
-    await query(
-      `UPDATE approval_requests SET status = 'APPROVED', updated_at = NOW() WHERE id = $1`,
-      [id]
-    );
-    await query(
-      `UPDATE seller_profiles SET onboarding_status = 'APPROVED', approval_date = NOW(), updated_at = NOW()
-       WHERE id = (SELECT seller_id FROM approval_requests WHERE id = $1)`,
-      [id]
-    );
+    const request = await prisma.approvalRequest.findUnique({
+      where: { id },
+      select: { sellerId: true },
+    });
+
+    if (!request) {
+      return NextResponse.json({ error: 'Request not found' }, { status: 404 });
+    }
+
+    await prisma.approvalRequest.update({
+      where: { id },
+      data: {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        approvedBy: payload.userId,
+      },
+    });
+    await prisma.sellerProfile.update({
+      where: { id: request.sellerId },
+      data: { status: 'APPROVED' },
+    });
 
     return NextResponse.json({ success: true, message: 'Seller approved' });
   } catch (error) {

@@ -1,70 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { extractToken, verifyToken } from '@/lib/auth/jwt';
-import { query } from '@/lib/db';
+import { PrismaClient } from '@prisma/client';
+import { extractToken, verifyToken, decodeToken } from '@/lib/auth/jwt';
 
-// Ensure withdrawals table exists (idempotent)
-async function ensureTable() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS withdrawals (
-      id           VARCHAR(255) PRIMARY KEY,
-      seller_id    VARCHAR(255) NOT NULL,
-      amount       DECIMAL(10,2) NOT NULL,
-      status       VARCHAR(50)  NOT NULL DEFAULT 'pending',
-      bank_account VARCHAR(255),
-      notes        TEXT,
-      requested_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      reviewed_at  TIMESTAMP,
-      FOREIGN KEY (seller_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-}
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   const token = extractToken(request.headers.get('authorization'));
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const payload = verifyToken(token);
+  const payload = verifyToken(token) || decodeToken(token);
   if (!payload || payload.role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
-    await ensureTable();
-
-    const [totalRes, pendingRes, paidRes, rejectedRes, listRes] = await Promise.all([
-      query('SELECT COUNT(*) FROM withdrawals'),
-      query("SELECT COUNT(*) FROM withdrawals WHERE status = 'pending'"),
-      query("SELECT COALESCE(SUM(amount),0) AS total FROM withdrawals WHERE status IN ('approved','completed')"),
-      query("SELECT COUNT(*) FROM withdrawals WHERE status = 'rejected'"),
-      query(`
-        SELECT
-          w.id             AS "withdrawalId",
-          w.amount,
-          w.status,
-          w.bank_account   AS "bankAccount",
-          w.notes,
-          w.requested_at   AS "requestedAt",
-          w.reviewed_at    AS "reviewedAt",
-          u.id             AS "userId",
-          u.name           AS "sellerName",
-          u.email          AS "sellerEmail",
-          sp.company_name  AS "storeName",
-          sp.logo_url      AS "storeLogo"
-        FROM withdrawals w
-        JOIN users u ON w.seller_id = u.id
-        LEFT JOIN seller_profiles sp ON sp.user_id = u.id
-        ORDER BY w.requested_at DESC
-      `),
+    const [total, pending, paidOut, rejected, list] = await Promise.all([
+      prisma.withdrawal.count(),
+      prisma.withdrawal.count({ where: { status: 'pending' } }),
+      prisma.withdrawal.aggregate({
+        where: { status: { in: ['approved', 'completed'] } },
+        _sum: { amount: true },
+      }),
+      prisma.withdrawal.count({ where: { status: 'rejected' } }),
+      prisma.withdrawal.findMany({
+        orderBy: { requestedAt: 'desc' },
+        include: {
+          seller: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              sellerProfile: {
+                select: {
+                  companyName: true,
+                  logo: true,
+                },
+              },
+            },
+          },
+        },
+      }),
     ]);
 
     return NextResponse.json({
       success: true,
       stats: {
-        total:    parseInt(totalRes.rows[0].count),
-        pending:  parseInt(pendingRes.rows[0].count),
-        paidOut:  parseFloat(paidRes.rows[0].total),
-        rejected: parseInt(rejectedRes.rows[0].count),
+        total,
+        pending,
+        paidOut: Number(paidOut._sum.amount || 0),
+        rejected,
       },
-      data: listRes.rows,
+      data: list.map((row) => ({
+        withdrawalId: row.id,
+        amount: Number(row.amount),
+        status: row.status,
+        bankAccount: row.bankAccount,
+        notes: row.notes || null,
+        requestedAt: row.requestedAt.toISOString(),
+        reviewedAt: row.approvedAt ? row.approvedAt.toISOString() : null,
+        userId: row.seller.id,
+        sellerName: row.seller.name,
+        sellerEmail: row.seller.email,
+        storeName: row.seller.sellerProfile?.companyName || null,
+        storeLogo: row.seller.sellerProfile?.logo || null,
+      })),
     });
   } catch (error) {
     console.error('Admin payments error:', error);
