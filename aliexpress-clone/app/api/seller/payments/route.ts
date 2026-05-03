@@ -17,7 +17,7 @@ async function computeSellerRevenue(sellerProfileId: string | null) {
   const items = await prisma.orderItem.findMany({
     where: {
       product: { sellerId: sellerProfileId },
-      order: { status: { in: ['PAID', 'DELIVERED', 'COMPLETED'] } },
+      order: { status: { in: ['PAID', 'DELIVERED'] } },
     },
     select: { subtotal: true },
   });
@@ -161,7 +161,6 @@ export async function POST(request: NextRequest) {
         amount,
         status: 'pending',
         bankAccount: bankAccount || null,
-        notes: enrichedNotes,
       },
     });
 

@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
         amount: Number(row.amount),
         status: row.status,
         bankAccount: row.bankAccount,
-        notes: row.notes || null,
         requestedAt: row.requestedAt.toISOString(),
         reviewedAt: row.approvedAt ? row.approvedAt.toISOString() : null,
         userId: row.seller.id,

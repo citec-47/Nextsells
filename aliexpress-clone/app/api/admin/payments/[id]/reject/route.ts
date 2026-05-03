@@ -23,7 +23,6 @@ export async function POST(
       data: {
         status: 'rejected',
         approvedAt: new Date(),
-        notes: body.reason ?? undefined,
       },
     });
     return NextResponse.json({ success: true });

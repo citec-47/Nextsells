@@ -33,8 +33,11 @@ export async function GET(request: NextRequest) {
     }
 
     const sellerResult = await getSellerProfile(payload.userId);
-    if (sellerResult.error || !sellerResult.profile) {
+    if (sellerResult.error) {
       return sellerResult.error;
+    }
+    if (!sellerResult.profile) {
+      return errorResponse('Seller profile not found', 404);
     }
 
     return successResponse({
@@ -62,8 +65,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     const sellerResult = await getSellerProfile(payload.userId);
-    if (sellerResult.error || !sellerResult.profile) {
+    if (sellerResult.error) {
       return sellerResult.error;
+    }
+    if (!sellerResult.profile) {
+      return errorResponse('Seller profile not found', 404);
     }
 
     const body = (await request.json()) as {

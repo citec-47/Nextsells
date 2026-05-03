@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
       prisma.approvalRequest.count({ where: { status: 'PENDING' } }),
       prisma.order.count(),
       prisma.order.count({ where: { status: { in: ['PENDING', 'CONFIRMED', 'PROCESSING'] } } }),
-      prisma.order.count({ where: { status: { in: ['DELIVERED', 'COMPLETED'] } } }),
+      prisma.order.count({ where: { status: { in: ['DELIVERED'] } } }),
       prisma.order.count({ where: { status: { in: ['SHIPPED'] } } }),
       prisma.order.aggregate({
-        where: { status: { in: ['DELIVERED', 'PAID'] } },
+        where: { status: { in: ['DELIVERED'] } },
         _sum: { totalAmount: true },
       }),
       prisma.withdrawal.count({ where: { status: 'pending' } }),
